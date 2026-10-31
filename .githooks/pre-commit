@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+# ============================================
+# Multi-agent collision guard.
+#
+# This repo is edited by multiple AI agents and by humans, sometimes
+# concurrently. Without this guard, the typical failure mode is:
+#
+#   1. Agent A starts work locally on commit X.
+#   2. Agent B pushes commits Y..Z to origin during A's session.
+#   3. A commits on top of stale X, creating divergence.
+#   4. A's push is rejected; reconciling Y..Z vs A's commit takes work.
+#
+# This hook fetches origin at commit time and refuses if local is strictly
+# behind, telling the user to pull first. Override with FORCE_COMMIT=1 if
+# you genuinely need to commit on a stale base.
+# ============================================
+set -e
+
+# Skip during merge / rebase / cherry-pick — we're already mid-resolution.
+if [ -e "$(git rev-parse --git-dir)/MERGE_HEAD" ] \
+    || [ -e "$(git rev-parse --git-dir)/REBASE_HEAD" ] \
+    || [ -e "$(git rev-parse --git-dir)/CHERRY_PICK_HEAD" ]; then
+    exit 0
+fi
+
+BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo HEAD)
+[ "$BRANCH" = "HEAD" ] && exit 0  # detached — skip
+
+UPSTREAM="origin/$BRANCH"
+git rev-parse --verify "$UPSTREAM" >/dev/null 2>&1 || exit 0  # no upstream — skip
+
+# Quietly fetch with a short timeout so a flaky network never blocks commits.
+# `timeout` may not exist on macOS by default; prefer `gtimeout` if present.
+TIMEOUT_BIN=""
+if command -v timeout >/dev/null 2>&1; then TIMEOUT_BIN="timeout 8"; fi
+if command -v gtimeout >/dev/null 2>&1; then TIMEOUT_BIN="gtimeout 8"; fi
+
+if ! $TIMEOUT_BIN git fetch origin --quiet "$BRANCH" 2>/dev/null; then
+    # Network failed — proceed without check rather than block all offline work.
+    exit 0
+fi
+
+LOCAL=$(git rev-parse HEAD)
+REMOTE=$(git rev-parse "$UPSTREAM")
+BASE=$(git merge-base HEAD "$UPSTREAM" 2>/dev/null || echo "$LOCAL")
+
+if [ "$LOCAL" = "$REMOTE" ]; then
+    exit 0  # in sync
+fi
+
+if [ "$LOCAL" = "$BASE" ]; then
+    # Local is strictly behind — committing here creates divergence.
+    BEHIND=$(git rev-list --count HEAD.."$UPSTREAM" 2>/dev/null || echo "?")
+    if [ -n "${FORCE_COMMIT:-}" ]; then
+        echo "[pre-commit] FORCE_COMMIT=1 — committing on stale base anyway ($BEHIND behind)" >&2
+        exit 0
+    fi
+    cat >&2 <<EOF
+
+✋  pre-commit guard: $UPSTREAM has $BEHIND commit(s) you don't have locally.
+
+    Pull first to avoid creating divergence with parallel work:
+      git pull --rebase
+
+    Then re-run your commit. (Override with FORCE_COMMIT=1 if you really
+    must commit on a stale base — e.g. emergency offline work.)
+
+EOF
+    exit 1
+fi
+
+# Local is ahead or already diverged — fine to commit; rebase/merge will
+# resolve at push time.
+exit 0

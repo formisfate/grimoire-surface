@@ -1,0 +1,61 @@
+{
+  "$comment": "Questions with known answers, run against every surface. These are the contract: if a refactor changes an answer, the test says so instead of a stranger finding out. Every fixture is a question a real user would ask, and the expected value is what the corpus actually says — measured, not assumed.",
+
+  "lookups": [
+    {
+      "query": "basil",
+      "expect_files": ["essential_oils.json", "herbs.json", "incense_resins.json"],
+      "why": "a substance and the forms it takes share an id, so one name resolves to three entries"
+    },
+    { "query": "lilith", "expect_files": ["deities.json"] },
+    {
+      "query": "mars",
+      "expect_files": ["planetary_talismans.json", "planets.json"],
+      "why": "the planet, and the talisman made for it"
+    },
+    { "query": "new moon", "expect_files": ["moon_phases.json"] },
+    { "query": "crown chakra", "expect_files": ["chakras.json"] }
+  ],
+
+  "entries": [
+    { "id": "basil", "expect_name": "Basil", "min_references_out": 10, "min_references_in": 50 },
+    { "id": "mars", "expect_name": "Mars", "min_references_out": 5, "min_references_in": 300 }
+  ],
+
+  "searches": [
+    { "query": "protection", "expect_first": "protection", "why": "a name match must outrank the entries that merely mention it" },
+    { "query": "gematria", "expect_contains": "gematria_systems" },
+    { "query": "goetia", "min_results": 1, "why": "no entry is called Goetia; the match is in body text, which is the point of full-text search" }
+  ],
+
+  "must_resolve": [
+    {
+      "id": "wands",
+      "expect_files": ["tarot_complete.json"],
+      "why": "a tarot suit — nested inside tarot_system.suits, not a top-level entry, and 160 references name it"
+    },
+    {
+      "id": "sage",
+      "expect_count": 4,
+      "why": "one id, four catalogues: an archetype, a herb, a resin and an essential oil"
+    }
+  ],
+
+  "meta_values_are_not_references": ["all", "none_traditionally", "all_chakras", "varies"],
+
+  "not_joins": [
+    { "file": "moon_phases.json", "field": "direction", "why": "lunar energy vocabulary, not a compass bearing" },
+    { "file": "ogham.json", "field": "letter", "why": "a Latin letter, not a Hebrew letter id" },
+    { "file": "lunar_mansions.json", "field": "talisman", "why": "a prose description of the image, not a reference to planetary_talismans.json" }
+  ],
+
+  "timing": {
+    "$comment": "A fixed instant in a fixed place, so the answer cannot drift with the clock. Sydney, 2026-10-31, is a Saturday: Saturn's day.",
+    "at": "2026-10-31T20:00:00+11:00",
+    "latitude": -33.86785,
+    "longitude": 151.20732,
+    "expect_planetary_day": "saturn",
+    "expect_basis": "location",
+    "expect_sabbat": "samhain"
+  }
+}

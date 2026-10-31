@@ -1,0 +1,25 @@
+{
+  "name": "grimoire-surface",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Query surface for the grimoire corpus — an MCP server, a read-only HTTP API, and a downloadable bundle. No dependencies, no build step.",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "bin": {
+    "grimoire-mcp": "./mcp/server.mjs"
+  },
+  "scripts": {
+    "test": "node test/run.mjs",
+    "bundle": "node scripts/build-bundle.mjs",
+    "gen:joins": "node scripts/gen-joins.mjs",
+    "gen:catalog": "node scripts/gen-catalog.mjs",
+    "vendor": "node scripts/vendor-site.mjs",
+    "check:joins": "node scripts/gen-joins.mjs --check",
+    "check:catalog": "node scripts/gen-catalog.mjs --check",
+    "check:vendor": "node scripts/vendor-site.mjs --check",
+    "check": "npm run test && npm run check:joins && npm run check:catalog && npm run check:vendor"
+  }
+}
