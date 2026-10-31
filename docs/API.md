@@ -294,6 +294,27 @@ breakdown, so you can see *why* something ranked where it did rather than trusti
 
 ---
 
+## `GET /bundle`
+
+The whole corpus in one file: every entry, the catalogue, and `joins.json`. About 4 MB of JSON,
+served as an attachment.
+
+```bash
+curl -L -o grimoire-bundle.json https://ensoul.so/api/grimoire/bundle
+```
+
+The response carries `$schema: "grimoire-bundle/1"`, the licence and attribution in `meta`, and the
+`data` object keyed by file name. It is built from the same mirror these endpoints read, so it cannot
+be a different corpus from the one answering `/entry`.
+
+This is the intended path for anything that wants the data rather than the API — including the MCP
+server: `node mcp/server.mjs --bundle grimoire-bundle.json` runs the full surface from this one file,
+with no corpus checkout.
+
+`Content-Disposition` names it `grimoire-<version>.json`, so a saved copy states which corpus it is.
+
+---
+
 ## `GET /tools`
 
 The MCP tool definitions, as JSON. Useful if you are building an agent and want the same schemas.

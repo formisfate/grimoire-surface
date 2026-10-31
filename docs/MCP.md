@@ -7,19 +7,34 @@ dependencies, no build step, no network access. It reads the corpus off disk.
 
 ## Setup
 
-Get the corpus. This repository deliberately contains **no data**:
+This repository deliberately contains **no data**. There are two ways to give the server a corpus.
+
+**Option 1 — the bundle (no corpus repo needed).** One file, the whole corpus and its join table:
 
 ```bash
-git clone <grimoire-remote> grimoire
-git clone <this-remote> grimoire-surface
+git clone https://github.com/formisfate/grimoire-surface.git
+cd grimoire-surface
+curl -L -o grimoire-bundle.json https://ensoul.so/api/grimoire/bundle
 ```
 
-They should be siblings. The server looks for the corpus in this order, and stops at the first hit:
+Point your client at `--bundle /absolute/path/to/grimoire-bundle.json` and you are done. This is the route for anyone who does
+not have access to the corpus repository, and it is the same corpus — the file is built from the same
+mirror the HTTP API serves, and both report the same content hash.
 
-1. `--corpus <dir>` on the command line
-2. `$GRIMOIRE_DIR`
-3. `../grimoire` — the sibling layout
-4. `./grimoire` — a subdirectory of the current directory
+**Option 2 — a corpus checkout.** If you have the `grimoire` repo, keep it beside this one:
+
+```bash
+git clone https://github.com/formisfate/grimoire-surface.git
+git clone <grimoire-remote> grimoire
+```
+
+The server looks for the corpus in this order, and stops at the first hit:
+
+1. `--bundle <file>` (highest precedence — an explicit file beats a directory search)
+2. `--corpus <dir>`
+3. `$GRIMOIRE_BUNDLE` / `$GRIMOIRE_DIR`
+4. `../grimoire` — the sibling layout
+5. `./grimoire` — a subdirectory of the current directory
 
 If none exist it says so, lists every path it tried, and exits non-zero.
 
@@ -65,6 +80,7 @@ claude mcp add grimoire -- node /absolute/path/to/grimoire-surface/mcp/server.mj
 
 ```bash
 node mcp/server.mjs --corpus /path/to/grimoire
+node mcp/server.mjs --bundle /path/to/grimoire-bundle.json
 ```
 
 Speaks JSON-RPC 2.0, one message per line, on stdin/stdout. It answers `initialize`, `tools/list`,

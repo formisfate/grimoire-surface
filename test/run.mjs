@@ -15,13 +15,16 @@
 // The last block drives the MCP server over real stdio, because a protocol bug is invisible to a
 // unit test: the server can answer every function correctly and still fail to complete a handshake.
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { spawn } from 'node:child_process';
+import { gzipSync } from 'node:zlib';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadCorpus, buildCorpus, isSystemEntry } from '../src/corpus.mjs';
 import { createSurface } from '../src/query.mjs';
 import { TOOLS } from '../src/tools.mjs';
+import { buildBundle, readBundle, bundleToCorpusInput } from '../src/bundle.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const CORPUS = resolve(process.env.GRIMOIRE_DIR ?? join(ROOT, '..', 'grimoire'));
@@ -224,6 +227,52 @@ check('the two data paths agree on search results', () => {
     const b = memory.search(q, { limit: 5 }).results.map((r) => `${r.id}@${r.file}`);
     assert(JSON.stringify(a) === JSON.stringify(b), `"${q}" differs: ${a.join(',')} vs ${b.join(',')}`);
   }
+});
+
+console.log('\nBundle');
+
+const tmp = mkdtempSync(join(tmpdir(), 'grimoire-test-'));
+const bundlePath = join(tmp, 'grimoire.json');
+const bundleGzPath = join(tmp, 'grimoire.min.json.gz');
+
+const bundle = buildBundle({
+  files: corpus.files,
+  catalog: corpus.catalog,
+  joins: corpus.joinsSpec,
+});
+writeFileSync(bundlePath, JSON.stringify(bundle));
+writeFileSync(bundleGzPath, gzipSync(Buffer.from(JSON.stringify(bundle)), { level: 9 }));
+
+check('the bundle carries the corpus, the catalog and the join table', () => {
+  assert(bundle.$schema === 'grimoire-bundle/1', `schema ${bundle.$schema}`);
+  assert(Object.keys(bundle.data).length === 81, `${Object.keys(bundle.data).length} data files`);
+  assert(bundle.catalog?.files?.length === 81, 'catalog missing or short');
+  assert(Object.keys(bundle.joins.global).length === 183, 'joins missing or short');
+  assert(bundle.meta.licence === 'CC BY-SA 4.0', 'licence missing from the file');
+});
+
+check('reading it back reproduces the same corpus version', () => {
+  for (const path of [bundlePath, bundleGzPath]) {
+    const rebuilt = createSurface(bundleToCorpusInput(readBundle(path)));
+    assert(
+      rebuilt.version.version === surface.version.version,
+      `${path} gave ${rebuilt.version.version}, corpus is ${surface.version.version}`,
+    );
+    assert(rebuilt.corpus.stats.entries === corpus.stats.entries, 'entry count changed through the bundle');
+    assert(rebuilt.graph.dangling === graph.dangling, 'dangling count changed through the bundle');
+  }
+});
+
+check('a bundle missing its join table is rejected rather than silently resolving nothing', () => {
+  const broken = join(tmp, 'broken.json');
+  writeFileSync(broken, JSON.stringify({ meta: bundle.meta, catalog: bundle.catalog, data: bundle.data }));
+  let threw = false;
+  try {
+    readBundle(broken);
+  } catch {
+    threw = true;
+  }
+  assert(threw, 'a bundle with no joins was accepted');
 });
 
 console.log('\nMCP server (stdio)');

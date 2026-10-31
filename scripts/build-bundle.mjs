@@ -20,7 +20,7 @@ import { gzipSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { corpusVersion } from '../src/version.mjs';
+import { buildBundle } from '../src/bundle.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const argv = process.argv.slice(2);
@@ -40,27 +40,9 @@ const files = readdirSync(corpus)
 const data = {};
 for (const f of files) data[f] = JSON.parse(readFileSync(join(corpus, f), 'utf8'));
 const joins = JSON.parse(readFileSync(join(corpus, 'joins.json'), 'utf8'));
-const version = corpusVersion(data, joins);
+const catalog = JSON.parse(readFileSync(join(corpus, 'catalog.json'), 'utf8'));
 
-const bundle = {
-  $schema: 'grimoire-bundle/1',
-  meta: {
-    corpus: version.version,
-    files: files.length,
-    entries: Object.values(data).reduce(
-      (n, arr) => n + (Array.isArray(arr) ? arr.filter((e) => e && typeof e.id === 'string').length : 0),
-      0,
-    ),
-    licence: 'CC BY-SA 4.0',
-    licence_url: 'https://creativecommons.org/licenses/by-sa/4.0/',
-    attribution: 'The Grimoire corpus — https://ensoul.so/grimoire',
-    built_by: 'grimoire-surface/scripts/build-bundle.mjs',
-    note: 'Provenance lives on each entry as `tradition` / `culture` / `source` / `note`. Where traditions disagree the entry says so; it does not pick a winner. Keep those fields if you redistribute.',
-  },
-  catalog: JSON.parse(readFileSync(join(corpus, 'catalog.json'), 'utf8')),
-  joins: JSON.parse(readFileSync(join(corpus, 'joins.json'), 'utf8')),
-  data,
-};
+const bundle = buildBundle({ files: data, catalog, joins });
 
 mkdirSync(outDir, { recursive: true });
 
@@ -79,7 +61,7 @@ writeFileSync(
 );
 
 const kb = (n) => `${(n / 1024).toFixed(0)} KB`;
-console.log(`corpus ${version.version} · ${files.length} files · ${bundle.meta.entries} entries`);
+console.log(`corpus ${bundle.meta.corpus} · ${files.length} files · ${bundle.meta.entries} entries`);
 console.log(`  grimoire.json         ${kb(statSync(join(outDir, 'grimoire.json')).size)}`);
 console.log(`  grimoire.min.json     ${kb(statSync(join(outDir, 'grimoire.min.json')).size)}`);
 console.log(`  grimoire.min.json.gz  ${kb(gz.length)}`);

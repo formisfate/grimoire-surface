@@ -4,10 +4,11 @@ If you want the corpus as JSON rather than as an API, this is what you need to k
 correctly. Most of it is one idea: **a value is a reference only when the corpus says so**, and the
 corpus says so in `joins.json`.
 
-Build the bundle:
+Download the bundle, or build it from a corpus checkout:
 
 ```bash
-npm run bundle
+curl -L -o grimoire-bundle.json https://ensoul.so/api/grimoire/bundle   # ~4 MB, always current
+npm run bundle                                    # or build it yourself
 ```
 
 ```

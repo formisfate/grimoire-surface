@@ -10,11 +10,13 @@
 //   node mcp/server.mjs                          # corpus found automatically
 //   GRIMOIRE_DIR=/path/to/grimoire node mcp/server.mjs
 //   node mcp/server.mjs --corpus /path/to/grimoire
+//   node mcp/server.mjs --bundle grimoire.min.json.gz
 //
 // Diagnostics go to stderr, always. stdout carries protocol frames and nothing else; a stray
 // console.log here corrupts the stream and the client disconnects without explaining why.
 
 import { createSurface } from '../src/query.mjs';
+import { readBundle, bundleToCorpusInput } from '../src/bundle.mjs';
 import { TOOLS } from '../src/tools.mjs';
 
 const PROTOCOL_VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05'];
@@ -22,12 +24,14 @@ const LATEST_PROTOCOL = PROTOCOL_VERSIONS[0];
 const SERVER_INFO = { name: 'grimoire', version: '1.0.0' };
 
 function parseArgs(argv) {
-  const out = { corpus: undefined, help: false };
+  const out = { corpus: undefined, bundle: process.env.GRIMOIRE_BUNDLE, help: false };
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
     if (a === '--corpus' || a === '-c') out.corpus = argv[++i];
+    else if (a === '--bundle' || a === '-b') out.bundle = argv[++i];
     else if (a === '--help' || a === '-h') out.help = true;
     else if (a.startsWith('--corpus=')) out.corpus = a.slice('--corpus='.length);
+    else if (a.startsWith('--bundle=')) out.bundle = a.slice('--bundle='.length);
   }
   return out;
 }
@@ -40,9 +44,13 @@ if (args.help) {
 Serves the Grimoire corpus (81 files, one symbolic system each) to any MCP client.
 
   node mcp/server.mjs [--corpus <dir>]
+  node mcp/server.mjs [--bundle grimoire.min.json[.gz]]
 
 The corpus is a separate git repo. It is found automatically when this repo and \`grimoire\`
 sit side by side, or set GRIMOIRE_DIR, or pass --corpus.
+
+If you do not have the corpus repo at all, download the bundle from
+https://ensoul.so/api/grimoire/bundle and pass it with --bundle. Same corpus, one file.
 
 Tools: ${TOOLS.map((t) => t.name).join(', ')}
 `);
@@ -51,7 +59,20 @@ Tools: ${TOOLS.map((t) => t.name).join(', ')}
 
 let surface = null;
 function getSurface() {
-  if (!surface) surface = createSurface(args.corpus);
+  if (surface) return surface;
+  // A bundle is the whole corpus in one file — the way in for anyone who cannot clone the private
+  // corpus repo. `--corpus` and `--bundle` are mutually exclusive by precedence: an explicit bundle
+  // wins, because asking for a specific file is more specific than pointing at a directory.
+  if (args.bundle) {
+    const bundle = readBundle(args.bundle);
+    surface = createSurface(bundleToCorpusInput(bundle));
+    const built = bundle.meta?.corpus;
+    if (built && built !== surface.version.version) {
+      log(`warning: ${args.bundle} declares corpus ${built} but its contents hash to ${surface.version.version}`);
+    }
+  } else {
+    surface = createSurface(args.corpus);
+  }
   return surface;
 }
 

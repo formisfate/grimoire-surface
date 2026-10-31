@@ -51,11 +51,22 @@ Claude Code, Claude Desktop, Cursor, or your own agent.
 The corpus is a separate repository — this one contains no data:
 
 ```bash
-git clone <grimoire-remote> grimoire
-git clone <this-remote> grimoire-surface
+git clone https://github.com/formisfate/grimoire-surface.git
+git clone <grimoire-remote> grimoire      # if you have access to it
 ```
 
 Keep them side by side. The server finds `../grimoire` automatically.
+
+**If you don't have access to the corpus repository, you don't need it.** Download the bundle — one
+file, the whole corpus and its join table — and point the server at that instead:
+
+```bash
+curl -L -o grimoire-bundle.json https://ensoul.so/api/grimoire/bundle   # ~4 MB
+node mcp/server.mjs --bundle grimoire-bundle.json
+```
+
+It is the same corpus, and it reports the same content hash, because the bundle is built from the
+same mirror the API serves.
 
 ### Claude Code
 
@@ -74,6 +85,12 @@ claude mcp add grimoire -- node /absolute/path/to/grimoire-surface/mcp/server.mj
     }
   }
 }
+```
+
+If you downloaded the bundle instead of the corpus, swap the argument:
+
+```json
+{ "command": "node", "args": ["/absolute/path/to/mcp/server.mjs", "--bundle", "/absolute/path/to/grimoire-bundle.json"] }
 ```
 
 If the corpus is somewhere else, add an environment variable rather than relying on the lookup:
@@ -147,7 +164,16 @@ Full endpoint reference: **[docs/API.md](docs/API.md)**.
 
 ## 3. Download bundle — for everything else
 
-One file, the whole corpus, plus the join table that says how it fits together:
+One file, the whole corpus, plus the join table that says how it fits together.
+
+**Download it:**
+
+```bash
+curl -L -o grimoire-bundle.json https://ensoul.so/api/grimoire/bundle
+# grimoire-bundle.json — ~4 MB, every entry plus `joins.json`
+```
+
+**Or build it**, from a corpus checkout:
 
 ```bash
 npm run bundle
@@ -156,6 +182,10 @@ npm run bundle
 # dist/grimoire.min.json.gz  1.0 MB  (what to actually ship)
 # dist/SHA256SUMS
 ```
+
+The API serves the same file it would build, from the same mirror, so downloading it and cloning the
+corpus give you the same bytes apart from whitespace. Point the MCP server at the download with
+`--bundle` and you have the whole thing running with no corpus checkout at all.
 
 The attribution and licence travel *inside* the file, because an unattributed copy of a CC BY-SA
 work is a licence violation and the file is the one place that survives being moved around.
