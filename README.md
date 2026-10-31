@@ -46,27 +46,28 @@ No dependencies. No build step. No network calls. It reads JSON off disk and ans
 The MCP server is for anything that speaks the [Model Context Protocol](https://modelcontextprotocol.io):
 Claude Code, Claude Desktop, Cursor, or your own agent.
 
-### Get the corpus first
+### Get the corpus
 
-The corpus is a separate repository — this one contains no data:
+The corpus is a separate repository, and **it is private** — so unless you have been given access,
+the bundle is how you get the data. One file, the whole corpus and its join table:
 
 ```bash
 git clone https://github.com/formisfate/grimoire-surface.git
-git clone <grimoire-remote> grimoire      # if you have access to it
+cd grimoire-surface
+curl -L -o grimoire-bundle.json https://ensoul.so/api/grimoire/bundle   # ~4 MB
 ```
 
-Keep them side by side. The server finds `../grimoire` automatically.
-
-**If you don't have access to the corpus repository, you don't need it.** Download the bundle — one
-file, the whole corpus and its join table — and point the server at that instead:
+Then point the server at it:
 
 ```bash
-curl -L -o grimoire-bundle.json https://ensoul.so/api/grimoire/bundle   # ~4 MB
 node mcp/server.mjs --bundle grimoire-bundle.json
 ```
 
 It is the same corpus, and it reports the same content hash, because the bundle is built from the
 same mirror the API serves.
+
+If you *do* have access to the `grimoire` repository, clone it beside this one instead and the server
+will find `../grimoire` automatically — both paths are supported and neither is second class.
 
 ### Claude Code
 

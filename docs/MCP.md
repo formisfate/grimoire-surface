@@ -21,12 +21,16 @@ Point your client at `--bundle /absolute/path/to/grimoire-bundle.json` and you a
 not have access to the corpus repository, and it is the same corpus — the file is built from the same
 mirror the HTTP API serves, and both report the same content hash.
 
-**Option 2 — a corpus checkout.** If you have the `grimoire` repo, keep it beside this one:
+**Option 2 — a corpus checkout.** The `grimoire` repository is private, so this option is for people
+who have been given access to it. Clone it beside this one:
 
 ```bash
 git clone https://github.com/formisfate/grimoire-surface.git
-git clone <grimoire-remote> grimoire
+git clone <corpus-repository-url-you-were-given> grimoire
 ```
+
+Everything below works identically either way; the rest of this page does not assume which one you
+used.
 
 The server looks for the corpus in this order, and stops at the first hit:
 
