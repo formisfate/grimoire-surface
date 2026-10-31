@@ -26,7 +26,7 @@ dist/SHA256SUMS
   "meta": {
     "corpus": "3b0a6d255670",
     "files": 81,
-    "entries": 3082,
+    "entries": 3083,
     "licence": "CC BY-SA 4.0",
     "attribution": "The Grimoire corpus — https://ensoul.so/grimoire"
   },
@@ -39,9 +39,9 @@ dist/SHA256SUMS
 }
 ```
 
-`meta.entries` counts every entry including the 21 system/reference front-matter objects;
-`catalog` counts exclude them. That difference of 21 is why the numbers in different places will not
-match, and it is not a bug.
+`meta.entries` (3,083) counts every entry including the 21 system/reference front-matter objects;
+`catalog` counts exclude them, so the catalogue totals 3,062. That difference of 21 is why the numbers
+in different places will not match, and it is not a bug.
 
 Each file is a JSON **array** of entries, each with a string `id`, unique within its file.
 
