@@ -57,7 +57,6 @@ export function createJoins(spec) {
     isMeta,
     isNotJoin,
     joinSpec,
-    vocabKeys: new Set(spec.vocab_keys ?? []),
     containers: new Set(spec.containers ?? []),
   };
 }

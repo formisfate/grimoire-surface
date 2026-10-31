@@ -50,7 +50,6 @@ const out = `// The grimoire corpus's join-field table, as the site needs it.
 //   GLOBAL_JOINS    field name -> [target collection, files the value may resolve against]
 //   SCOPED_JOINS    \`file|field\` -> the same, for fields whose meaning is file-specific
 //                   (a planet's \`exaltation\` is a sign; a sign's \`exaltation\` is a planet)
-//   VOCAB_KEYS      keys that hold vocabularies, never references, even when the name looks like one
 //   CONTAINERS      keys whose object groups more values (\`{"primary": [...], "secondary": [...]}\`)
 //   NOT_JOINS       (file, field, path-substring) triples that hold a labelled vocabulary, not refs
 //   META_VALUES     values that are legal in a reference field and mean "everything" or "nothing"
@@ -60,8 +59,6 @@ export type JoinSpec = [target: string, files: string[]];
 export const GLOBAL_JOINS: Record<string, JoinSpec> = ${oneLine(spec.global)};
 
 export const SCOPED_JOINS: Record<string, JoinSpec> = ${oneLine(spec.scoped)};
-
-export const VOCAB_KEYS: ReadonlySet<string> = ${setOf(spec.vocab_keys)};
 
 export const CONTAINERS: ReadonlySet<string> = ${setOf(spec.containers)};
 
@@ -99,5 +96,5 @@ if (check) {
 } else {
   writeFileSync(target, out);
   console.log(`wrote ${target}`);
-  console.log(`  global ${Object.keys(spec.global).length} · scoped ${Object.keys(spec.scoped).length} · not_joins ${spec.not_joins.length} · meta ${spec.meta_values.length}`);
+  console.log(`  global ${Object.keys(spec.global).length} · scoped ${Object.keys(spec.scoped).length} · not_joins ${spec.not_joins.length} · meta ${spec.meta_values.length} · containers ${spec.containers.length}`);
 }

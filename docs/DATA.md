@@ -153,7 +153,7 @@ same licence.
 
 The underlying facts belong to nobody: this is drawn from Agrippa, the Golden Dawn's Book T, the
 Arbatel, the Key of Solomon and Liber 777, most of it centuries out of copyright. What the licence
-covers is the selection, the structure, the 34,936 cross-references, and the editorial work of
+covers is the selection, the structure, the 34,999 cross-references, and the editorial work of
 recording where each claim comes from and where traditions disagree.
 
 A mention that travels is what the licence asks for in practice:

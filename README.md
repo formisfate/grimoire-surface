@@ -2,7 +2,7 @@
 
 A query surface for the **Grimoire** — a hand-curated corpus of 81 JSON files of esoteric and
 metaphysical reference data: planets, deities, tarot, runes, chakras, stones, herbs, the tree of
-life, the I Ching, the Shem HaMephorash, Ifá, Jyotisha, and more. 3,083 entries, 34,936
+life, the I Ching, the Shem HaMephorash, Ifá, Jyotisha, and more. 3,083 entries, 34,999
 cross-references, every one of them resolving.
 
 The corpus is the interesting part and it lives elsewhere. This repo is what makes it answerable.
@@ -23,7 +23,7 @@ A `git clone` already gives you the tables. What it does not give you is the thi
 for:
 
 - **The graph.** Entries reference each other by id — a stone says which planet rules it, a deity
-  says which herbs are its own, a working says which hour supports it. 34,936 edges, all resolved.
+  says which herbs are its own, a working says which hour supports it. 34,999 edges, all resolved.
   Ask *what connects Basil to Mars to Aries to the workings that call for it* and get an answer in
   one step.
 - **Provenance that survives.** Every entry carries `tradition`, `culture`, `source` and — where the

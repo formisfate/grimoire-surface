@@ -20,26 +20,14 @@
 
 import { isSystemEntry } from './corpus.mjs';
 
-/**
- * Constructor keys. A reference field may be wrapped in an object that only *groups* more values —
- * `{"primary": [...], "secondary": [...]}` — rather than naming an entry itself. These keys mean
- * "keep descending", not "this is a target".
- */
-const GROUPS = new Set([
-  'primary',
-  'secondary',
-  'supportive',
-  'tertiary',
-  'options',
-  'values',
-  'items',
-  'list',
-  'main',
-  'other',
-  'others',
-  'major',
-  'minor',
-]);
+// Constructor keys — keys whose object only *groups* more values (`{"primary": [...]}`) rather than
+// naming an entry itself. They mean "keep descending", not "this is a target".
+//
+// The set is declared by the corpus (`joins.json` → `containers`), not hard-coded here. It used to be
+// hard-coded in two places — this walker and the website's — as a 13-key subset of the 19 the corpus
+// declared, which is the exact kind of duplicated rule this project keeps getting bitten by. The two
+// sets were measured against the corpus and produce identical graphs, so adopting the declared set
+// changed no answer while leaving only one copy to maintain.
 
 /**
  * Walk an entry and collect raw references. Mirrors the corpus checker's own walker: the field name
@@ -55,7 +43,7 @@ function walkForRefs(node, file, joins, field, path, out) {
     for (const [k, v] of Object.entries(node)) {
       const childPath = path ? `${path}.${k}` : k;
       const spec = joins.joinSpec(file, k, path);
-      if (spec && GROUPS.has(k)) {
+      if (spec && joins.containers.has(k)) {
         walkForRefs(v, file, joins, k, childPath, out);
       } else if (spec) {
         walkRefValue(v, file, joins, k, childPath, out);
@@ -93,7 +81,7 @@ function walkRefValue(node, file, joins, field, path, out) {
   }
   if (node && typeof node === 'object') {
     for (const [k, v] of Object.entries(node)) {
-      if (GROUPS.has(k)) walkRefValue(v, file, joins, field, `${path}.${k}`, out);
+      if (joins.containers.has(k)) walkRefValue(v, file, joins, field, `${path}.${k}`, out);
       else walkForRefs(v, file, joins, k, `${path}.${k}`, out);
     }
   }

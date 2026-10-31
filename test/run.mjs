@@ -74,23 +74,16 @@ check('the corpus has the shape it claims', () => {
   assert(graph.refCount > 30000, `expected >30000 references, found ${graph.refCount}`);
 });
 
-check('references resolve, except the ones we know about', () => {
-  if (graph.dangling === 0) return;
-  const known = new Set(['bagua_areas.json|trigram|tai chi']);
+check('every reference resolves', () => {
+  // This was "except the ones we know about" until 2026-10-31, with one documented exception: the
+  // centre of the bagua, whose `trigram` was "tai chi" — the pole the eight turn around, not one of
+  // the eight. It now reads `none_traditionally`, which is a legal meta value, so there are no
+  // exceptions left and the count is a hard invariant rather than a list.
   const found = [];
   for (const [, refs] of graph.forward) {
-    for (const r of refs) {
-      if (r.targets.length === 0) found.push(r.id);
-    }
+    for (const r of refs) if (r.targets.length === 0) found.push(`${r.field}=${r.id}`);
   }
-  const unexpected = found.filter((v) => v !== 'tai chi');
-  assert(
-    unexpected.length === 0,
-    `${unexpected.length} unexpected dangling reference(s): ${unexpected.slice(0, 5).join(', ')}`,
-  );
-  // The one known exception is the centre of the bagua, whose `trigram` is "tai chi" — the pole the
-  // eight turn around, which is not one of the eight. See docs/FINDINGS-2026-10-31.md.
-  assert(found.length === known.size, `expected exactly ${known.size} known dangling, found ${found.length}`);
+  assert(found.length === 0, `${found.length} unresolved reference(s): ${found.slice(0, 5).join(', ')}`);
 });
 
 console.log('\nFixtures');
@@ -153,6 +146,16 @@ for (const f of fixtures.must_resolve) {
     if (f.expect_count) assert(refs.length === f.expect_count, `expected ${f.expect_count}, got ${refs.length}`);
   });
 }
+
+check('every hexagram phase resolves to a Wu Xing phase', () => {
+  // The `element` → `phase` rename (2026-10-31) is only an improvement if the values actually join.
+  // A hexagram whose phase named nothing would render as plain text and look fine, which is exactly
+  // the kind of silent regression this suite exists for.
+  const hexagrams = corpus.collectionByFile.get('hexagrams.json')?.entries ?? [];
+  assert(hexagrams.length > 0, 'no hexagrams loaded');
+  const unresolved = hexagrams.filter((e) => !corpus.byId.has(String(e.phase)));
+  assert(unresolved.length === 0, `${unresolved.length} hexagram(s) have a phase that names nothing`);
+});
 
 check('meta values are never reported as dangling', () => {
   for (const v of fixtures.meta_values_are_not_references) {
@@ -247,7 +250,12 @@ check('the bundle carries the corpus, the catalog and the join table', () => {
   assert(bundle.$schema === 'grimoire-bundle/1', `schema ${bundle.$schema}`);
   assert(Object.keys(bundle.data).length === 81, `${Object.keys(bundle.data).length} data files`);
   assert(bundle.catalog?.files?.length === 81, 'catalog missing or short');
-  assert(Object.keys(bundle.joins.global).length === 183, 'joins missing or short');
+  // Derive the expected size from the corpus rather than freezing a number: this test is about
+  // the bundle carrying the table, not about how many rules the table happens to have.
+  assert(
+    Object.keys(bundle.joins.global).length === Object.keys(corpus.joinsSpec.global).length,
+    'joins missing or short',
+  );
   assert(bundle.meta.licence === 'CC BY-SA 4.0', 'licence missing from the file');
 });
 
