@@ -215,13 +215,21 @@ where each claim comes from and where traditions disagree.
 ## Working on this repo
 
 ```bash
-node test/run.mjs        # 35 checks: invariants, fixtures, and MCP driven over real stdio
-npm run check            # the above, plus drift guards
+node test/run.mjs   # the suite: invariants, fixtures, and the MCP server driven over real stdio
+npm run check       # every surface, aligned or not — use this one
 ```
 
-`npm run check` fails if `grimoire/joins.json` has moved on, if `grimoire/catalog.json`'s entry
-counts are stale, or if the copy of this code vendored into the website has drifted. Those three
-are the invisible failures: everything keeps working and quietly disagrees.
+`npm run check` runs `scripts/check-all.mjs`, which is the answer to "is everything still
+agreeing?" The corpus feeds four things across two repositories — the website's mirror, its graph,
+its generated join table, and the query surface vendored into it — and each guard alone misses
+something. In particular it catches the two that used to pass silently: **a corpus file that was
+never mirrored**, and **a mirrored file the website's graph does not import** (no page, no links,
+invisible to a reader).
+
+**If you are changing the corpus, read [docs/CHANGING-THE-CORPUS.md](docs/CHANGING-THE-CORPUS.md)
+first.** It maps every change — an entry, a new catalogue, the join table, this repo's code, the MCP
+tools, a number quoted in a document, an endpoint — to the precise sequence that keeps the surfaces
+in step, and lists the traps that have actually bitten.
 
 ```
 src/            the query core — corpus, graph, search, timing, formatting
