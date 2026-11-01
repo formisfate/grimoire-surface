@@ -261,6 +261,7 @@ With no arguments: every file with its entry count. With `file`: every entry in 
 | `date` | string | ISO 8601; defaults to now |
 | `latitude`, `longitude` | number | decimal degrees |
 | `hemisphere` | string | inferred from latitude |
+| `time_zone` | string | IANA zone, e.g. `Australia/Sydney`. Weekday, time of day, season and sabbat dates are judged in it; without it they use the server's zone and `caveats` says which |
 
 Planetary day, planetary hour, all 24 hours, moon phase, season, nearest sabbat.
 
@@ -281,6 +282,7 @@ that mean anything locally.
 | `phase` | string | one phase id; defaults to the four cardinal ones |
 | `working` | string | a `core_workings` id — returns the best windows for it |
 | `limit` | number | windows to return, default 5, max 20 |
+| `time_zone` | string | IANA zone, e.g. `Australia/Sydney`. Weekday, time of day, season and sabbat dates are judged in it; without it they use the server's zone and `caveats` says which |
 
 The forward half of `timing`. `timing` answers *what is true now*; this answers *when*, which is the
 next question people ask and the one nothing else in the corpus could answer.
@@ -319,6 +321,7 @@ lookup failed.
 |---|---|---|
 | `date`, `latitude`, `longitude` | | as `/timing` |
 | `moon_sign` | string | optional; skips the sign factor if absent |
+| `time_zone` | string | IANA zone, e.g. `Australia/Sydney`. Weekday, time of day, season and sabbat dates are judged in it; without it they use the server's zone and `caveats` says which |
 | `limit` | number | default 10 |
 
 Ranks the 49 core workings against the conditions. With no arguments it uses now, so "what should I

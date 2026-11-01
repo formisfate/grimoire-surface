@@ -160,6 +160,7 @@ export const TOOLS = [
         latitude: { type: 'number', description: 'Optional. Decimal degrees, south negative.' },
         longitude: { type: 'number', description: 'Optional. Decimal degrees, west negative.' },
         hemisphere: { type: 'string', enum: ['northern', 'southern'], description: 'Optional. Inferred from latitude when omitted.' },
+        time_zone: { type: 'string', description: "Optional IANA time zone, e.g. Australia/Sydney. Without it, weekday, time of day, season and sabbat dates use the server's zone." },
       },
       additionalProperties: false,
     },
@@ -175,6 +176,7 @@ export const TOOLS = [
         latitude: { type: 'number', description: 'Optional. Improves the planetary-hour calculation.' },
         longitude: { type: 'number', description: 'Optional.' },
         moon_sign: { type: 'string', description: 'Optional. The zodiac sign the moon is in, if you know it. Otherwise the sign factor is skipped.' },
+        time_zone: { type: 'string', description: "Optional IANA time zone, e.g. Australia/Sydney. Without it, weekday, time of day, season and sabbat dates use the server's zone." },
         limit: { type: 'number', description: 'Maximum workings to return (default 10).' },
       },
       additionalProperties: false,
@@ -192,6 +194,7 @@ export const TOOLS = [
         latitude: { type: 'number', description: 'Optional. Decimal degrees, south negative. Improves hour boundaries.' },
         longitude: { type: 'number', description: 'Optional.' },
         hemisphere: { type: 'string', enum: ['northern', 'southern'], description: 'Optional. Inferred from latitude when omitted.' },
+        time_zone: { type: 'string', description: "Optional IANA time zone, e.g. Australia/Sydney. Without it, weekday, time of day, season and sabbat dates use the server's zone." },
         planet: {
           type: 'string',
           enum: ['sun', 'moon', 'mars', 'mercury', 'jupiter', 'venus', 'saturn'],

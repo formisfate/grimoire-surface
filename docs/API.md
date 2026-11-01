@@ -349,6 +349,7 @@ The symbolic conditions at a moment.
 | `date` | now | ISO 8601, e.g. `2026-10-31T20:00:00+11:00` |
 | `lat`, `lon` | — | Decimal degrees; south and west negative |
 | `hemisphere` | inferred | `northern` or `southern` |
+| `time_zone` | — | IANA zone; weekday, time of day, season and sabbat dates are judged in it. Defaults to the server's |
 
 ```bash
 curl 'https://ensoul.so/api/grimoire/timing?lat=-33.87&lon=151.21'
@@ -382,6 +383,7 @@ planet, and the best windows for a working.
 | `phase` | — | One phase id; defaults to the four cardinal ones |
 | `working` | — | A `core_workings` id; returns ranked windows |
 | `limit` | `5` | Windows to return, max 20 |
+| `time_zone` | — | IANA zone; weekday, time of day, season and sabbat dates are judged in it. Defaults to the server's |
 
 ```bash
 curl -G 'https://ensoul.so/api/grimoire/when' \
@@ -438,6 +440,7 @@ Rank the corpus's 49 core workings against the conditions.
 |---|---|---|
 | `date`, `lat`, `lon` | now | As `/timing` |
 | `moon_sign` | — | If you know it. Without it the sign factor is **skipped**, not failed. |
+| `time_zone` | — | IANA zone; weekday, time of day, season and sabbat dates are judged in it. Defaults to the server's |
 | `limit` | `10` | |
 
 ```bash

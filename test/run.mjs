@@ -332,6 +332,29 @@ check('working windows are ahead, ranked, and weekday-consistent', () => {
   }
 });
 
+check('clock and calendar judgements follow the named zone, not the server', () => {
+  // 10:00 on 1 December in Sydney is 23:00 on 30 November in UTC: different hour, different season
+  // (northern autumn ends in November), different weekday. Before this was threaded, the droplet
+  // (UTC) answered "morning" to a Sydney evening and labelled December with November's season.
+  const at = '2026-12-01T10:00:00+11:00';
+  const syd = surface.timing({ date: at, time_zone: 'Australia/Sydney' });
+  const utc = surface.timing({ date: at, time_zone: 'UTC' });
+  assert(!syd.error && !utc.error, 'timing rejected a valid zone');
+  assert(syd.time_of_day !== utc.time_of_day, `both zones said ${syd.time_of_day}`);
+  assert(syd.season !== utc.season, `both zones said ${syd.season}`);
+  assert(
+    syd.caveats.some((c) => c.includes('Australia/Sydney')),
+    'the response did not name the zone it used',
+  );
+
+  const fSyd = surface.fits({ date: at, time_zone: 'Australia/Sydney' });
+  const fUtc = surface.fits({ date: at, time_zone: 'UTC' });
+  assert(fSyd.conditions.weekday === 'tuesday', `Sydney weekday was ${fSyd.conditions.weekday}`);
+  assert(fUtc.conditions.weekday === 'monday', `UTC weekday was ${fUtc.conditions.weekday}`);
+
+  assert(surface.timing({ time_zone: 'Mars/Olympus' }).error?.code === 'bad_request', 'a made-up zone was accepted');
+});
+
 check('when rejects what it cannot answer', () => {
   assert(surface.when({ phase: 'blue_moon' }).error?.code === 'bad_request', 'a made-up phase was accepted');
   assert(surface.when({ planet: 'earth' }).error?.code === 'bad_request', 'a non-ruler was accepted');

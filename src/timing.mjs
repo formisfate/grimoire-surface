@@ -24,6 +24,68 @@ const SYNODIC_MONTH = 29.530588853;
 /** A known new moon: 2000-01-06 18:14 UTC. */
 const NEW_MOON_EPOCH = Date.UTC(2000, 0, 6, 18, 14, 0);
 
+// --- whose clock is it? ---------------------------------------------------------------------------
+//
+// Everything below that says "morning", "Saturday", "spring" or "31 October" is a *wall-clock*
+// judgement, and a wall clock belongs to a place. Until 2026-11-01 this module quietly used the
+// runtime's own zone, which was correct on a laptop and wrong on the droplet: the server runs UTC,
+// so a Sydney caller asking at 20:00 was told "morning", and a window on 1 November was labelled
+// with October's season. A caller can now name the zone; if they do not, we fall back to the
+// server's and the response says so.
+
+/** The zone the runtime believes it is in — the fallback when the caller names none. */
+export const SERVER_TIME_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+const zoneFormatters = new Map();
+
+function formatterFor(timeZone) {
+  const zone = timeZone ?? SERVER_TIME_ZONE;
+  let f = zoneFormatters.get(zone);
+  if (!f) {
+    f = new Intl.DateTimeFormat('en-GB', {
+      timeZone: zone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+      weekday: 'long',
+    });
+    zoneFormatters.set(zone, f);
+  }
+  return f;
+}
+
+export function isValidTimeZone(timeZone) {
+  if (typeof timeZone !== 'string' || !timeZone.trim()) return false;
+  try {
+    formatterFor(timeZone).format(new Date());
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** The wall-clock pieces of an instant, in a zone. */
+export function zoneParts(date, timeZone) {
+  const parts = Object.fromEntries(
+    formatterFor(timeZone).formatToParts(date).map((p) => [p.type, p.value]),
+  );
+  return {
+    year: Number(parts.year),
+    month: Number(parts.month),
+    day: Number(parts.day),
+    hour: Number(parts.hour),
+    weekday: String(parts.weekday).toLowerCase(),
+  };
+}
+
+/** A calendar date as a UTC-midnight number, for counting whole days across any zone. */
+function dayNumber({ year, month, day }) {
+  return Date.UTC(year, month - 1, day);
+}
+
 const toRadians = (d) => (d * Math.PI) / 180;
 const toDegrees = (r) => (r * 180) / Math.PI;
 
@@ -105,32 +167,30 @@ export function sunTimes(date, latitude, longitude) {
   return { sunrise: at(sunriseMinutes), sunset: at(sunsetMinutes) };
 }
 
-export function dayOfWeek(date) {
+export function dayOfWeek(date, timeZone) {
+  if (timeZone) return zoneParts(date, timeZone).weekday;
   return ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][date.getDay()];
 }
 
 /**
- * A calendar date as YYYY-MM-DD in *local* time.
+ * A calendar date as YYYY-MM-DD in a named zone, or the runtime's own when none is given.
  *
  * `toISOString().slice(0, 10)` is the obvious way to do this and it is wrong east of UTC: Samhain
  * at local midnight on 31 October is 30 October in UTC, so every sabbat was reported a day early in
- * Sydney. A festival's date is a local calendar fact, not an instant.
+ * Sydney. A festival's date is a calendar fact for a place, not an instant.
  */
-function ymd(date) {
+function ymd(date, timeZone) {
+  if (timeZone) {
+    const p = zoneParts(date, timeZone);
+    return `${p.year}-${String(p.month).padStart(2, '0')}-${String(p.day).padStart(2, '0')}`;
+  }
   const d = new Date(date);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-/** Local midnight, for counting whole days between calendar dates. */
-function startOfDay(date) {
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  return d.getTime();
-}
-
 /** The planet that rules a weekday, read from the corpus's own `weekdays.json`. */
-export function planetaryDayPlanet(corpus, date) {
-  const day = dayOfWeek(date);
+export function planetaryDayPlanet(corpus, date, timeZone) {
+  const day = dayOfWeek(date, timeZone);
   const entry = corpus.collectionByFile.get('weekdays.json')?.entryById.get(day);
   const planet = entry?.planetary_ruler?.planet ?? entry?.planet?.id ?? entry?.planet;
   if (typeof planet === 'string') return planet;
@@ -146,7 +206,7 @@ export function planetaryDayPlanet(corpus, date) {
  * are one twelfth of daylight and night hours one twelfth of darkness, so they are equal only at
  * the equinox — which is the part most implementations get wrong.
  */
-export function planetaryHours(corpus, date, { latitude, longitude } = {}) {
+export function planetaryHours(corpus, date, { latitude, longitude, timeZone } = {}) {
   const hasLocation =
     typeof latitude === 'number' && typeof longitude === 'number' && Number.isFinite(latitude);
   const today = hasLocation ? sunTimes(date, latitude, longitude) : null;
@@ -172,7 +232,7 @@ export function planetaryHours(corpus, date, { latitude, longitude } = {}) {
   const dayLen = (sunset.getTime() - sunrise.getTime()) / 12;
   const nightLen = (nextSunrise.getTime() - sunset.getTime()) / 12;
 
-  const ruler = planetaryDayPlanet(corpus, date);
+  const ruler = planetaryDayPlanet(corpus, date, timeZone);
   const startIndex = Math.max(0, CHALDEAN_ORDER.indexOf(ruler));
   const planetFor = (i) => CHALDEAN_ORDER[(startIndex + i) % 7];
 
@@ -283,8 +343,8 @@ export function nextMoonPhase(date, id) {
   };
 }
 
-export function season(date = new Date(), hemisphere = 'northern') {
-  const month = date.getMonth() + 1;
+export function season(date = new Date(), hemisphere = 'northern', timeZone) {
+  const month = timeZone ? zoneParts(date, timeZone).month : date.getMonth() + 1;
   const north =
     month >= 3 && month <= 5
       ? 'spring'
@@ -297,8 +357,8 @@ export function season(date = new Date(), hemisphere = 'northern') {
   return { spring: 'autumn', summer: 'winter', autumn: 'spring', winter: 'summer' }[north];
 }
 
-export function timeOfDay(date = new Date()) {
-  const h = date.getHours();
+export function timeOfDay(date = new Date(), timeZone) {
+  const h = timeZone ? zoneParts(date, timeZone).hour : date.getHours();
   if (h >= 5 && h < 9) return 'dawn';
   if (h >= 9 && h < 12) return 'morning';
   if (h === 12) return 'noon';
@@ -328,28 +388,34 @@ const SABBAT_DATES = {
 };
 
 /**
- * Every sabbat between two instants, in order.
+ * Every sabbat whose date falls between two moments, in order.
  *
  * The dates are the fixed ones the corpus uses; the astronomical quarter-days drift by a day or so
  * year to year, and the corpus's own entries say so. Years either side of the range are scanned
  * because a window can straddle a year boundary — a 30-day look-ahead from 20 December must find
  * Yule *and* Imbolc.
+ *
+ * A sabbat is a calendar date, so the comparison is between calendar dates in the caller's zone,
+ * not between instants: a festival does not begin at midnight UTC for everyone.
  */
-export function sabbatsInRange(corpus, from = new Date(), to = new Date(from.getTime() + 30 * 86400000)) {
-  const found = [];
-  const first = from.getFullYear() - 1;
-  const last = to.getFullYear() + 1;
+export function sabbatsInRange(corpus, from = new Date(), to = new Date(from.getTime() + 30 * 86400000), timeZone) {
+  const fromDay = dayNumber(zoneParts(from, timeZone));
+  const toDay = dayNumber(zoneParts(to, timeZone));
+  const fromYear = zoneParts(from, timeZone).year;
+  const toYear = zoneParts(to, timeZone).year;
 
+  const found = [];
   for (const [id, [month, day]] of Object.entries(SABBAT_DATES)) {
-    for (let y = first; y <= last; y += 1) {
-      const when = new Date(y, month - 1, day);
-      if (when < from || when > to) continue;
+    for (let y = fromYear - 1; y <= toYear + 1; y += 1) {
+      const dayAt = Date.UTC(y, month - 1, day);
+      if (dayAt < fromDay || dayAt > toDay) continue;
       const entry = corpus.collectionByFile.get('sabbats.json')?.entryById.get(id);
       found.push({
         id,
         name: entry?.name ?? id,
-        date: ymd(when),
-        when,
+        date: `${y}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
+        day: dayAt,
+        days_away: Math.round((dayAt - fromDay) / 86400000),
         themes: entry?.themes ?? [],
         ritual_focus: entry?.ritual_focus ?? null,
         source: entry ? 'sabbats.json' : null,
@@ -357,27 +423,28 @@ export function sabbatsInRange(corpus, from = new Date(), to = new Date(from.get
     }
   }
 
-  return found.sort((a, b) => a.when - b.when);
+  return found.sort((a, b) => a.day - b.day);
 }
 
-export function nearbySabbat(corpus, date = new Date(), windowDays = 7) {
+export function nearbySabbat(corpus, date = new Date(), windowDays = 7, timeZone) {
   const from = new Date(date.getTime() - windowDays * 86400000);
   const to = new Date(date.getTime() + windowDays * 86400000);
+  const today = dayNumber(zoneParts(date, timeZone));
 
   let best = null;
-  for (const s of sabbatsInRange(corpus, from, to)) {
-    const daysAway = Math.round((startOfDay(s.when) - startOfDay(date)) / 86400000);
+  for (const s of sabbatsInRange(corpus, from, to, timeZone)) {
+    const daysAway = Math.round((s.day - today) / 86400000);
     if (!best || Math.abs(daysAway) < Math.abs(best.daysAway)) best = { s, daysAway };
   }
   if (!best) return null;
 
-  const { when, ...rest } = best.s;
+  const { day, ...rest } = best.s;
   return { ...rest, days_away: best.daysAway };
 }
 
 /** Where a whole timing snapshot starts: everything above, for one moment. */
-export function timingSnapshot(corpus, { date = new Date(), latitude, longitude, hemisphere } = {}) {
-  const hours = planetaryHours(corpus, date, { latitude, longitude });
+export function timingSnapshot(corpus, { date = new Date(), latitude, longitude, hemisphere, timeZone } = {}) {
+  const hours = planetaryHours(corpus, date, { latitude, longitude, timeZone });
   const north =
     hemisphere === 'southern' ? 'southern' : typeof latitude === 'number' && latitude < 0 ? 'southern' : 'northern';
   return {
@@ -390,9 +457,9 @@ export function timingSnapshot(corpus, { date = new Date(), latitude, longitude,
     sunrise: hours.sunrise.toISOString(),
     sunset: hours.sunset.toISOString(),
     moon: moonPhase(date),
-    season: season(date, north),
-    time_of_day: timeOfDay(date),
-    sabbat: nearbySabbat(corpus, date),
+    season: season(date, north, timeZone),
+    time_of_day: timeOfDay(date, timeZone),
+    sabbat: nearbySabbat(corpus, date, 7, timeZone),
     hours: hours.hours.map((h) => ({
       number: h.number,
       day: h.day,
@@ -405,6 +472,9 @@ export function timingSnapshot(corpus, { date = new Date(), latitude, longitude,
       hours.basis === 'approximation'
         ? "No latitude/longitude supplied: the day was divided at a flat 6am/6pm in *the server's* time zone. That is only a couple of hours out if the caller is near the server; otherwise it can be many hours out. Supply latitude and longitude for an honest hour boundary."
         : 'Sunrise and sunset computed for the supplied latitude/longitude.',
+      `Clock and calendar judgements — weekday, time of day, season, sabbat dates — are evaluated in ${
+        timeZone ?? SERVER_TIME_ZONE
+      }${timeZone ? '' : " (the server's zone; pass `time_zone` for yours)"}.`,
       'Moon phase is computed from the mean synodic month, accurate to about a day.',
     ],
   };
@@ -500,14 +570,14 @@ export function scoreWorkings(workings, conditions) {
 export function nextPlanetaryHour(
   corpus,
   planet,
-  { from = new Date(), latitude, longitude, maxDays = 7, daylightOnly = false } = {},
+  { from = new Date(), latitude, longitude, maxDays = 7, daylightOnly = false, timeZone } = {},
 ) {
   const wanted = String(planet).trim().toLowerCase();
 
   for (let d = 0; d < maxDays; d += 1) {
     const day = new Date(from);
     day.setDate(day.getDate() + d);
-    const hours = planetaryHours(corpus, day, { latitude, longitude });
+    const hours = planetaryHours(corpus, day, { latitude, longitude, timeZone });
 
     for (const h of hours.hours) {
       // On the first day, only hours that have not started yet; later days are entirely ahead.
@@ -543,7 +613,7 @@ export function nextPlanetaryHour(
 export function workingWindows(
   corpus,
   working,
-  { from = new Date(), days = 30, latitude, longitude, hemisphere, limit = 5 } = {},
+  { from = new Date(), days = 30, latitude, longitude, hemisphere, limit = 5, timeZone } = {},
 ) {
   const end = new Date(from.getTime() + days * 86400000);
   const perDay = [];
@@ -551,7 +621,7 @@ export function workingWindows(
   for (let d = 0; d < days; d += 1) {
     const day = new Date(from);
     day.setDate(day.getDate() + d);
-    const snap = timingSnapshot(corpus, { date: day, latitude, longitude, hemisphere });
+    const snap = timingSnapshot(corpus, { date: day, latitude, longitude, hemisphere, timeZone });
 
     let best = null;
     for (const h of snap.hours) {
@@ -564,17 +634,17 @@ export function workingWindows(
         // still inside the previous sunrise-to-sunrise cycle, but `fits` scores the calendar
         // weekday (as the website does), so scoring the cycle here would make the two verbs
         // disagree about the same moment. `weekday` is echoed so the answer explains itself.
-        dayOfWeek: dayOfWeek(start),
+        dayOfWeek: dayOfWeek(start, timeZone),
         moonPhase: snap.moon.id,
         planetaryHourPlanet: h.planet,
         season: snap.season,
-        timeOfDay: timeOfDay(start),
+        timeOfDay: timeOfDay(start, timeZone),
         sabbat: snap.sabbat,
       };
       const scored = scoreWorkings([working], conditions)[0];
       if (!best || scored.percentage > best.percentage) {
         best = {
-          date: ymd(start),
+          date: ymd(start, timeZone),
           start: h.start,
           end: h.end,
           hour: { number: h.number, day: h.day, planet: h.planet },
@@ -582,7 +652,7 @@ export function workingWindows(
           score: scored.score,
           matched: scored.factors.filter((f) => f.matched).map((f) => f.name),
           conditions: {
-            weekday: dayOfWeek(start),
+            weekday: dayOfWeek(start, timeZone),
             planetary_day: snap.planetary_day,
             moon_phase: snap.moon.id,
             season: snap.season,

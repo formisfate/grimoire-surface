@@ -27,12 +27,46 @@ import { buildGraph, pathBetween } from './graph.mjs';
 import { buildSearchIndex, search as runSearch, lookup as runLookup } from './search.mjs';
 import { entrySummary, entryFull, edgeOut, edgeIn, provenanceOf, href } from './format.mjs';
 import { corpusVersion } from './version.mjs';
-import { timingSnapshot, scoreWorkings, dayOfWeek, moonPhase, nextMoonPhase, sabbatsInRange, nextPlanetaryHour, workingWindows, planetaryHours, MOON_PHASES, CHALDEAN_ORDER } from './timing.mjs';
+import {
+  timingSnapshot,
+  scoreWorkings,
+  dayOfWeek,
+  moonPhase,
+  nextMoonPhase,
+  sabbatsInRange,
+  nextPlanetaryHour,
+  workingWindows,
+  planetaryHours,
+  isValidTimeZone,
+  SERVER_TIME_ZONE,
+  MOON_PHASES,
+  CHALDEAN_ORDER,
+} from './timing.mjs';
 
 const MAX_LIMIT = 200;
 
 function fail(code, message, hint) {
   return { error: { code, message, ...(hint ? { hint } : {}) } };
+}
+
+/**
+ * Read an optional `time_zone`. A wall clock belongs to a place, and the server's place is not the
+ * caller's — so this is validated rather than passed through, because `Intl` throws on a bad zone and
+ * "morning" computed in the wrong zone is a wrong answer that looks right.
+ */
+function zoneOf(value) {
+  if (value === undefined || value === null || value === '') return { zone: undefined };
+  const zone = String(value).trim();
+  if (!isValidTimeZone(zone)) {
+    return {
+      error: fail(
+        'bad_request',
+        `\`${value}\` is not a time zone I recognise.`,
+        'Use an IANA name such as Australia/Sydney or Europe/London.',
+      ),
+    };
+  }
+  return { zone };
 }
 
 // --- structured matching (`find`) ---------------------------------------------------------------
@@ -516,7 +550,9 @@ export function createSurface(options) {
   }
 
   /** What is true right now: planetary day and hour, moon, season, nearest sabbat. */
-  function timing({ date, latitude, longitude, hemisphere } = {}) {
+  function timing({ date, latitude, longitude, hemisphere, time_zone: timeZone } = {}) {
+    const parsedZone = zoneOf(timeZone);
+    if (parsedZone.error) return parsedZone.error;
     let when = new Date();
     if (date) {
       when = new Date(date);
@@ -529,16 +565,29 @@ export function createSurface(options) {
     if ((lat !== undefined && !Number.isFinite(lat)) || (lon !== undefined && !Number.isFinite(lon))) {
       return fail('bad_request', 'latitude and longitude must be numbers.');
     }
-    return { ...meta(), ...timingSnapshot(corpus, { date: when, latitude: lat, longitude: lon, hemisphere }) };
+    return {
+      ...meta(),
+      ...timingSnapshot(corpus, { date: when, latitude: lat, longitude: lon, hemisphere, timeZone: parsedZone.zone }),
+    };
   }
 
   /**
    * Rank the corpus's workings against conditions. With no conditions given it uses the timing
    * snapshot for now, which makes "what should I do tonight" a single call.
    */
-  function fits({ date, latitude, longitude, hemisphere, moon_sign: moonSign, season: seasonOverride, limit = 10 } = {}) {
-    const snap = timing({ date, latitude, longitude, hemisphere });
+  function fits({
+    date,
+    latitude,
+    longitude,
+    hemisphere,
+    moon_sign: moonSign,
+    season: seasonOverride,
+    limit = 10,
+    time_zone: timeZone,
+  } = {}) {
+    const snap = timing({ date, latitude, longitude, hemisphere, time_zone: timeZone });
     if (snap.error) return snap;
+    const parsedZone = zoneOf(timeZone);
 
     // The corpus's `optimal_timing.days` holds weekday names ('saturday'), and the website scores
     // against those. This passed the *planetary ruler* ('saturn') until 2026-11-01, so the Day
@@ -546,7 +595,7 @@ export function createSurface(options) {
     const when = new Date(snap.at);
     const workings = corpus.collectionByFile.get('core_workings.json')?.entries ?? [];
     const conditions = {
-      dayOfWeek: dayOfWeek(when),
+      dayOfWeek: dayOfWeek(when, parsedZone.zone),
       moonPhase: snap.moon.id,
       moonPhaseDisplay: snap.moon.display,
       moonSign: moonSign ? String(moonSign) : undefined,
@@ -601,7 +650,12 @@ export function createSurface(options) {
     working,
     limit = 5,
     daylight_only: daylightOnly = false,
+    time_zone: timeZone,
   } = {}) {
+    const parsedZone = zoneOf(timeZone);
+    if (parsedZone.error) return parsedZone.error;
+    const zone = parsedZone.zone;
+
     let start = new Date();
     const given = from ?? date;
     if (given) {
@@ -619,7 +673,7 @@ export function createSurface(options) {
 
     const horizon = Math.min(90, Math.max(1, Number(days) || 30));
     const end = new Date(start.getTime() + horizon * 86400000);
-    const basis = planetaryHours(corpus, start, { latitude: lat, longitude: lon }).basis;
+    const basis = planetaryHours(corpus, start, { latitude: lat, longitude: lon, timeZone: zone }).basis;
 
     // Phases default to the four cardinal ones: those are what people ask, and returning all eight
     // would bury the answer in crescents.
@@ -641,13 +695,9 @@ export function createSurface(options) {
       .filter(Boolean)
       .sort((a, b) => a.date.localeCompare(b.date));
 
-    // Whole days between local calendar dates: on the festival itself that is 0, not -1.
-    const daysBetween = (a, b) =>
-      Math.round((new Date(a).setHours(0, 0, 0, 0) - new Date(b).setHours(0, 0, 0, 0)) / 86400000);
-    const sabbats = sabbatsInRange(corpus, start, end).map(({ when: at, ...rest }) => ({
-      ...rest,
-      days_away: daysBetween(at, start),
-    }));
+    // A sabbat is a calendar date, so the range and the distance are counted in calendar days in the
+    // caller's zone — on the festival itself `days_away` is 0, not -1.
+    const sabbats = sabbatsInRange(corpus, start, end, zone).map(({ day, ...rest }) => rest);
 
     const planetWanted = planet === undefined || planet === null || planet === '' ? null : String(planet).trim().toLowerCase();
     if (planetWanted && !CHALDEAN_ORDER.includes(planetWanted)) {
@@ -658,7 +708,7 @@ export function createSurface(options) {
       );
     }
     const hour = planetWanted
-      ? nextPlanetaryHour(corpus, planetWanted, { from: start, latitude: lat, longitude: lon, daylightOnly: Boolean(daylightOnly) })
+      ? nextPlanetaryHour(corpus, planetWanted, { from: start, latitude: lat, longitude: lon, daylightOnly: Boolean(daylightOnly), timeZone: zone })
       : null;
 
     let workingBlock;
@@ -684,6 +734,7 @@ export function createSurface(options) {
           latitude: lat,
           longitude: lon,
           hemisphere,
+          timeZone: zone,
           limit: Math.min(20, Math.max(1, Number(limit) || 5)),
         }),
       };
@@ -703,8 +754,13 @@ export function createSurface(options) {
         : {}),
       caveats: [
         basis === 'approximation'
-          ? "No latitude/longitude supplied: hour boundaries use a flat 6am/6pm in *the server's* time zone, which is only close to the truth if you are near it. Pass latitude and longitude for windows that mean anything locally."
+          ? `No latitude/longitude supplied: hour boundaries use a flat 6am/6pm in ${
+              zone ?? "the server's time zone"
+            }${zone ? '' : " (pass `time_zone` for yours)"}.`
           : 'Sunrise and sunset computed for the supplied latitude/longitude.',
+        `Weekday, time of day, season and sabbat dates are evaluated in ${
+          zone ?? SERVER_TIME_ZONE
+        }${zone ? '' : " — the server's zone; pass `time_zone` for yours"}.`,
         'Phase dates come from the mean synodic month and are accurate to about a day. The instant given is the middle of the phase window — opposition for the full moon, conjunction for the new — not an almanac time.',
         ...(workingBlock
           ? [
