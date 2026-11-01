@@ -130,6 +130,7 @@ echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":
 | `grimoire_path` | How does Basil connect to Aries — and by which fields? |
 | `grimoire_list` | Show me every stone / every hexagram. |
 | `grimoire_timing` | What's the planetary hour right now? |
+| `grimoire_when` | When's the next full moon — and when should I do this? |
 | `grimoire_fits` | What should I be doing under these conditions? |
 
 Full reference, including what each returns and how to read it: **[docs/MCP.md](docs/MCP.md)**.

@@ -108,6 +108,25 @@ export function dayOfWeek(date) {
   return ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][date.getDay()];
 }
 
+/**
+ * A calendar date as YYYY-MM-DD in *local* time.
+ *
+ * `toISOString().slice(0, 10)` is the obvious way to do this and it is wrong east of UTC: Samhain
+ * at local midnight on 31 October is 30 October in UTC, so every sabbat was reported a day early in
+ * Sydney. A festival's date is a local calendar fact, not an instant.
+ */
+function ymd(date) {
+  const d = new Date(date);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/** Local midnight, for counting whole days between calendar dates. */
+function startOfDay(date) {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
 /** The planet that rules a weekday, read from the corpus's own `weekdays.json`. */
 export function planetaryDayPlanet(corpus, date) {
   const day = dayOfWeek(date);
@@ -193,29 +212,73 @@ export function planetaryHours(corpus, date, { latitude, longitude } = {}) {
   };
 }
 
+/**
+ * The moon's phases as age windows, in days since astronomical new moon.
+ *
+ * One table, used by both `moonPhase` (which phase is it *now*) and `nextMoonPhase` (when is the
+ * next one). The corpus's phase ids are the authority; the boundaries are the ones the website's
+ * moon widget has always used, and they are symmetric about the four cardinal instants —
+ * new 0 d, first quarter 7.38 d, full 14.77 d, last quarter 22.15 d — which is what lets a "next
+ * full moon" be computed from the same numbers that decide "which phase are we in".
+ */
+export const MOON_PHASES = [
+  { id: 'new_moon', display: 'New Moon', lower: 0, upper: 1.0 },
+  { id: 'waxing_crescent', display: 'Waxing Crescent', lower: 1.0, upper: 6.38 },
+  { id: 'first_quarter', display: 'First Quarter', lower: 6.38, upper: 8.38 },
+  { id: 'waxing_gibbous', display: 'Waxing Gibbous', lower: 8.38, upper: 13.76 },
+  { id: 'full_moon', display: 'Full Moon', lower: 13.76, upper: 15.76 },
+  { id: 'waning_gibbous', display: 'Waning Gibbous', lower: 15.76, upper: 21.15 },
+  { id: 'last_quarter', display: 'Last Quarter', lower: 21.15, upper: 23.15 },
+  { id: 'waning_crescent', display: 'Waning Crescent', lower: 23.15, upper: 28.53 },
+  { id: 'new_moon', display: 'New Moon', lower: 28.53, upper: SYNODIC_MONTH },
+];
+
+/** Days since astronomical new moon, on the mean synodic month. */
+function moonAge(date) {
+  const days = (date.getTime() - NEW_MOON_EPOCH) / 86400000;
+  return ((days % SYNODIC_MONTH) + SYNODIC_MONTH) % SYNODIC_MONTH;
+}
+
 /** Mean-synodic-month approximation of the moon's phase, mapped onto the corpus's phase ids. */
 export function moonPhase(date = new Date()) {
-  const days = (date.getTime() - NEW_MOON_EPOCH) / 86400000;
-  const age = ((days % SYNODIC_MONTH) + SYNODIC_MONTH) % SYNODIC_MONTH;
-  const bounds = [
-    [1.0, 'new_moon', 'New Moon'],
-    [6.38, 'waxing_crescent', 'Waxing Crescent'],
-    [8.38, 'first_quarter', 'First Quarter'],
-    [13.76, 'waxing_gibbous', 'Waxing Gibbous'],
-    [15.76, 'full_moon', 'Full Moon'],
-    [21.15, 'waning_gibbous', 'Waning Gibbous'],
-    [23.15, 'last_quarter', 'Last Quarter'],
-    [28.53, 'waning_crescent', 'Waning Crescent'],
-    [SYNODIC_MONTH, 'new_moon', 'New Moon'],
-  ];
-  const [, id, display] = bounds.find(([limit]) => age < limit) ?? bounds[bounds.length - 1];
+  const age = moonAge(date);
+  const found = MOON_PHASES.find((p) => age < p.upper) ?? MOON_PHASES[MOON_PHASES.length - 1];
   const illumination = (1 - Math.cos((2 * Math.PI * age) / SYNODIC_MONTH)) / 2;
   return {
-    id,
-    display,
+    id: found.id,
+    display: found.display,
     age_days: Number(age.toFixed(2)),
     illumination: Number((illumination * 100).toFixed(1)),
     approximation: 'mean synodic month; accurate to about a day',
+  };
+}
+
+/**
+ * When the mean synodic age next reaches the middle of a phase's window.
+ *
+ * The middle, not the start, because the middle is the traditional instant: conjunction for the new
+ * moon, opposition for the full. The response always carries that caveat, because a mean synodic
+ * model is accurate to roughly a day and will not match an almanac to the hour.
+ */
+export function nextMoonPhase(date, id) {
+  const wanted = String(id).trim().toLowerCase();
+  const phase = MOON_PHASES.find((p) => p.id === wanted);
+  if (!phase) return null;
+
+  // New moon wraps the cycle, so its middle is 0 rather than the midpoint of 28.53–29.53.
+  const centre = wanted === 'new_moon' ? 0 : (phase.lower + phase.upper) / 2;
+  const age = moonAge(date);
+  let delta = centre - age;
+  if (delta < 0) delta += SYNODIC_MONTH;
+
+  const instant = new Date(date.getTime() + delta * 86400000);
+  const illumination = (1 - Math.cos((2 * Math.PI * centre) / SYNODIC_MONTH)) / 2;
+  return {
+    id: phase.id,
+    display: phase.display,
+    date: instant.toISOString(),
+    days_away: Number(delta.toFixed(2)),
+    illumination: Number((illumination * 100).toFixed(1)),
   };
 }
 
@@ -246,10 +309,11 @@ export function timeOfDay(date = new Date()) {
 }
 
 /**
- * The nearest sabbat within `windowDays`, or null.
+ * The eight fixed sabbat dates, by month and day.
  *
- * The dates are the fixed ones the corpus uses; the astronomical quarter-days drift by a day or so
- * year to year, and the corpus's own entries say so.
+ * They are the fixed ones the corpus uses; the astronomical quarter-days drift by a day or so year
+ * to year, and the corpus's own entries say so. The point of the fixed dates is that two surfaces
+ * agree on which day the festival falls, not that it is astronomically exact.
  */
 const SABBAT_DATES = {
   samhain: [10, 31],
@@ -262,31 +326,52 @@ const SABBAT_DATES = {
   mabon: [9, 22],
 };
 
-export function nearbySabbat(corpus, date = new Date(), windowDays = 7) {
-  const year = date.getFullYear();
-  let best = null;
+/**
+ * Every sabbat between two instants, in order.
+ *
+ * The dates are the fixed ones the corpus uses; the astronomical quarter-days drift by a day or so
+ * year to year, and the corpus's own entries say so. Years either side of the range are scanned
+ * because a window can straddle a year boundary — a 30-day look-ahead from 20 December must find
+ * Yule *and* Imbolc.
+ */
+export function sabbatsInRange(corpus, from = new Date(), to = new Date(from.getTime() + 30 * 86400000)) {
+  const found = [];
+  const first = from.getFullYear() - 1;
+  const last = to.getFullYear() + 1;
 
   for (const [id, [month, day]] of Object.entries(SABBAT_DATES)) {
-    for (const y of [year - 1, year, year + 1]) {
+    for (let y = first; y <= last; y += 1) {
       const when = new Date(y, month - 1, day);
-      const delta = Math.round((when.getTime() - date.getTime()) / 86400000);
-      if (Math.abs(delta) <= windowDays && (!best || Math.abs(delta) < Math.abs(best.daysAway))) {
-        best = { id, when, daysAway: delta };
-      }
+      if (when < from || when > to) continue;
+      const entry = corpus.collectionByFile.get('sabbats.json')?.entryById.get(id);
+      found.push({
+        id,
+        name: entry?.name ?? id,
+        date: ymd(when),
+        when,
+        themes: entry?.themes ?? [],
+        ritual_focus: entry?.ritual_focus ?? null,
+        source: entry ? 'sabbats.json' : null,
+      });
     }
+  }
+
+  return found.sort((a, b) => a.when - b.when);
+}
+
+export function nearbySabbat(corpus, date = new Date(), windowDays = 7) {
+  const from = new Date(date.getTime() - windowDays * 86400000);
+  const to = new Date(date.getTime() + windowDays * 86400000);
+
+  let best = null;
+  for (const s of sabbatsInRange(corpus, from, to)) {
+    const daysAway = Math.round((startOfDay(s.when) - startOfDay(date)) / 86400000);
+    if (!best || Math.abs(daysAway) < Math.abs(best.daysAway)) best = { s, daysAway };
   }
   if (!best) return null;
 
-  const entry = corpus.collectionByFile.get('sabbats.json')?.entryById.get(best.id);
-  return {
-    id: best.id,
-    name: entry?.name ?? best.id,
-    date: best.when.toISOString().slice(0, 10),
-    days_away: best.daysAway,
-    themes: entry?.themes ?? [],
-    ritual_focus: entry?.ritual_focus ?? null,
-    source: entry ? 'sabbats.json' : null,
-  };
+  const { when, ...rest } = best.s;
+  return { ...rest, days_away: best.daysAway };
 }
 
 /** Where a whole timing snapshot starts: everything above, for one moment. */
@@ -401,4 +486,114 @@ export function scoreWorkings(workings, conditions) {
       };
     })
     .sort((a, b) => b.percentage - a.percentage);
+}
+
+/**
+ * The next hour of a given planet, from a moment forward.
+ *
+ * Each of the seven appears three or four times in a day, so this is always found within a day; the
+ * `maxDays` bound exists so a caller who asks for something that is not a planet gets null rather
+ * than an unbounded scan. `daylightOnly` is the common practical ask — a Venus hour at 3am is
+ * technically correct and useless to someone who wants to do the work before dinner.
+ */
+export function nextPlanetaryHour(
+  corpus,
+  planet,
+  { from = new Date(), latitude, longitude, maxDays = 7, daylightOnly = false } = {},
+) {
+  const wanted = String(planet).trim().toLowerCase();
+
+  for (let d = 0; d < maxDays; d += 1) {
+    const day = new Date(from);
+    day.setDate(day.getDate() + d);
+    const hours = planetaryHours(corpus, day, { latitude, longitude });
+
+    for (const h of hours.hours) {
+      // On the first day, only hours that have not started yet; later days are entirely ahead.
+      if (d === 0 && h.start.getTime() < from.getTime()) continue;
+      if (daylightOnly && !h.day) continue;
+      if (h.planet !== wanted) continue;
+
+      return {
+        planet: h.planet,
+        number: h.number,
+        day: h.day,
+        start: h.start.toISOString(),
+        end: h.end.toISOString(),
+        hours_away: Number(((h.start.getTime() - from.getTime()) / 3600000).toFixed(1)),
+      };
+    }
+  }
+  return null;
+}
+
+/**
+ * When a working fits best over a horizon.
+ *
+ * The corpus states a working's timing as an election — days, phases, hours, seasons, signs — so
+ * "when should I do this" is a search over future days, not a guess. Every planetary hour in the
+ * horizon is scored, and the best hour of each day is kept: returning the top thirty hours
+ * outright would answer the question with a pile of adjacent afternoons rather than a window.
+ *
+ * Percentages are comparable within one response, not across questions: the moon-sign factor is
+ * skipped (there is no ephemeris here), so every working's maximum is 10 points lower than the
+ * website's.
+ */
+export function workingWindows(
+  corpus,
+  working,
+  { from = new Date(), days = 30, latitude, longitude, hemisphere, limit = 5 } = {},
+) {
+  const end = new Date(from.getTime() + days * 86400000);
+  const perDay = [];
+
+  for (let d = 0; d < days; d += 1) {
+    const day = new Date(from);
+    day.setDate(day.getDate() + d);
+    const snap = timingSnapshot(corpus, { date: day, latitude, longitude, hemisphere });
+
+    let best = null;
+    for (const h of snap.hours) {
+      const start = new Date(h.start);
+      if (d === 0 && start.getTime() < from.getTime()) continue;
+      if (start > end) continue;
+
+      const conditions = {
+        // The weekday of the *instant*, not of the planetary cycle it belongs to. A 5am hour is
+        // still inside the previous sunrise-to-sunrise cycle, but `fits` scores the calendar
+        // weekday (as the website does), so scoring the cycle here would make the two verbs
+        // disagree about the same moment. `weekday` is echoed so the answer explains itself.
+        dayOfWeek: dayOfWeek(start),
+        moonPhase: snap.moon.id,
+        planetaryHourPlanet: h.planet,
+        season: snap.season,
+        timeOfDay: timeOfDay(start),
+        sabbat: snap.sabbat,
+      };
+      const scored = scoreWorkings([working], conditions)[0];
+      if (!best || scored.percentage > best.percentage) {
+        best = {
+          date: ymd(start),
+          start: h.start,
+          end: h.end,
+          hour: { number: h.number, day: h.day, planet: h.planet },
+          percentage: scored.percentage,
+          score: scored.score,
+          matched: scored.factors.filter((f) => f.matched).map((f) => f.name),
+          conditions: {
+            weekday: dayOfWeek(start),
+            planetary_day: snap.planetary_day,
+            moon_phase: snap.moon.id,
+            season: snap.season,
+            sabbat: snap.sabbat?.id ?? null,
+          },
+        };
+      }
+    }
+    if (best) perDay.push(best);
+  }
+
+  return perDay
+    .sort((a, b) => b.percentage - a.percentage || a.start.localeCompare(b.start))
+    .slice(0, limit);
 }

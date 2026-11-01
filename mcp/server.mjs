@@ -127,6 +127,8 @@ function callTool(name, input) {
       return s.list(input);
     case 'grimoire_timing':
       return s.timing(input);
+    case 'grimoire_when':
+      return s.when(input);
     case 'grimoire_fits':
       return s.fits(input);
     default:

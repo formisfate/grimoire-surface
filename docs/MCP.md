@@ -1,6 +1,6 @@
 # MCP server
 
-A [Model Context Protocol](https://modelcontextprotocol.io) server over stdio. Ten tools, no
+A [Model Context Protocol](https://modelcontextprotocol.io) server over stdio. Eleven tools, no
 dependencies, no build step, no network access. It reads the corpus off disk.
 
 ---
@@ -268,6 +268,50 @@ Read `basis` and `caveats` before trusting an hour boundary. `basis: "location"`
 and sunset for the coordinates; `basis: "approximation"` means a flat 6am/6pm, which can be a couple
 of hours out.
 
+### `grimoire_when`
+
+| Arg | Type | Notes |
+|---|---|---|
+| `from` | string | ISO 8601; defaults to now |
+| `days` | number | how far ahead, default 30, max 90 |
+| `latitude`, `longitude` | number | improves hour boundaries |
+| `planet` | string | `sun` … `saturn` — the next hour of that planet |
+| `daylight_only` | boolean | skip night hours |
+| `phase` | string | one phase id; defaults to the four cardinal ones |
+| `working` | string | a `core_workings` id — returns the best windows for it |
+| `limit` | number | windows to return, default 5, max 20 |
+
+The forward half of `timing`. `timing` answers *what is true now*; this answers *when*, which is the
+next question people ask and the one nothing else in the corpus could answer.
+
+```json
+{ "from": "2026-10-31T20:00:00+11:00", "days": 30, "planet": "venus", "working": "protection" }
+```
+
+```text
+moon.next   last_quarter 2026-11-02 · new_moon 2026-11-09 · first_quarter 2026-11-17 · full_moon 2026-11-24
+hour        venus, 19th hour (night), 4 hours away
+windows     2026-11-03 mars 100% · 2026-11-07 saturn 100% · 2026-11-28 saturn 100%
+```
+
+Three things it is careful about:
+
+- **Phase dates are the middle of the phase window** — conjunction for new, opposition for full — on
+  the mean synodic month, so they are accurate to about a day and will not match an almanac. The
+  `caveats` say so.
+- **Windows are the best hour of each day**, not every hour above a threshold. Returning the top
+  thirty hours outright would answer "when should I do this" with a pile of adjacent afternoons.
+- **The weekday is the instant's, not the planetary cycle's.** A 5am hour is still inside the
+  previous sunrise-to-sunrise cycle, but `fits` scores the calendar weekday, so scoring the cycle
+  here would make the two verbs disagree about the same moment. Each window echoes
+  `conditions.weekday` so the answer explains itself.
+
+`working` windows skip the moon-sign factor (there is no ephemeris here), so percentages rank
+against each other within one response rather than against the website's absolute scores.
+
+An empty `sabbats` array is a real answer: it means no festival falls in the horizon, not that the
+lookup failed.
+
 ### `grimoire_fits`
 
 | Arg | Type | Notes |
@@ -281,6 +325,11 @@ be doing right now" is one call. Every result carries its `factors` breakdown.
 
 If you do not supply `moon_sign`, that factor is **skipped** rather than scored as a miss — so a
 working is not penalised for your not knowing something.
+
+The **Day** factor compares the weekday name (`saturday`), which is what the corpus's
+`optimal_timing.days` holds, and `conditions` reports both `weekday` and `planetary_day` so the two
+cannot be confused. Before 2026-11-01 the surface passed the ruling planet (`saturn`) instead, which
+meant the heaviest factor could never match and every working was ranked without it.
 
 ---
 

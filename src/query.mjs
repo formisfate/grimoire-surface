@@ -16,6 +16,7 @@
 //   how do X and Y connect    path       (multi-hop, field-labelled)
 //   what's in this file       list
 //   what is true right now    timing
+//   when is the next ...      when       (forward-looking: phases, sabbats, hours, windows)
 //   what fits these conditions  fits
 //
 // Every response carries `corpus.version`, so an answer can always be attributed to a specific
@@ -26,7 +27,7 @@ import { buildGraph, pathBetween } from './graph.mjs';
 import { buildSearchIndex, search as runSearch, lookup as runLookup } from './search.mjs';
 import { entrySummary, entryFull, edgeOut, edgeIn, provenanceOf, href } from './format.mjs';
 import { corpusVersion } from './version.mjs';
-import { timingSnapshot, scoreWorkings } from './timing.mjs';
+import { timingSnapshot, scoreWorkings, dayOfWeek, moonPhase, nextMoonPhase, sabbatsInRange, nextPlanetaryHour, workingWindows, planetaryHours, MOON_PHASES, CHALDEAN_ORDER } from './timing.mjs';
 
 const MAX_LIMIT = 200;
 
@@ -539,9 +540,13 @@ export function createSurface(options) {
     const snap = timing({ date, latitude, longitude, hemisphere });
     if (snap.error) return snap;
 
+    // The corpus's `optimal_timing.days` holds weekday names ('saturday'), and the website scores
+    // against those. This passed the *planetary ruler* ('saturn') until 2026-11-01, so the Day
+    // factor — the heaviest at 25 points — could never match and every working was ranked without it.
+    const when = new Date(snap.at);
     const workings = corpus.collectionByFile.get('core_workings.json')?.entries ?? [];
     const conditions = {
-      dayOfWeek: String(snap.planetary_day),
+      dayOfWeek: dayOfWeek(when),
       moonPhase: snap.moon.id,
       moonPhaseDisplay: snap.moon.display,
       moonSign: moonSign ? String(moonSign) : undefined,
@@ -556,7 +561,8 @@ export function createSurface(options) {
       ...meta(),
       at: snap.at,
       conditions: {
-        planetary_day: conditions.dayOfWeek,
+        weekday: conditions.dayOfWeek,
+        planetary_day: snap.planetary_day,
         planetary_hour: conditions.planetaryHourPlanet,
         moon_phase: conditions.moonPhase,
         moon_sign: conditions.moonSign ?? null,
@@ -571,6 +577,140 @@ export function createSurface(options) {
         ...snap.caveats,
         ...(conditions.moonSign ? [] : ['No moon sign supplied, so the sign factor was skipped rather than scored as a miss.']),
         'Only `core_workings.json` is ranked; rituals and talismans are in their own catalogues.',
+      ],
+    };
+  }
+
+  /**
+   * When? The forward half of `timing`.
+   *
+   * `timing` answers "what is true now", which is the wrong shape for the question people actually
+   * ask next: which day, which hour, how long until. So this looks forward over a horizon and
+   * returns the next phase, the next sabbat, the next hour of a planet, and — given a working — the
+   * windows the corpus's own election says are best.
+   */
+  function when({
+    from,
+    date,
+    days = 30,
+    latitude,
+    longitude,
+    hemisphere,
+    planet,
+    phase,
+    working,
+    limit = 5,
+    daylight_only: daylightOnly = false,
+  } = {}) {
+    let start = new Date();
+    const given = from ?? date;
+    if (given) {
+      start = new Date(given);
+      if (Number.isNaN(start.getTime())) {
+        return fail('bad_request', `\`${given}\` is not a date I can read.`, 'Use ISO 8601, e.g. 2026-10-31T20:00:00+11:00.');
+      }
+    }
+
+    const lat = latitude === undefined || latitude === null ? undefined : Number(latitude);
+    const lon = longitude === undefined || longitude === null ? undefined : Number(longitude);
+    if ((lat !== undefined && !Number.isFinite(lat)) || (lon !== undefined && !Number.isFinite(lon))) {
+      return fail('bad_request', 'latitude and longitude must be numbers.');
+    }
+
+    const horizon = Math.min(90, Math.max(1, Number(days) || 30));
+    const end = new Date(start.getTime() + horizon * 86400000);
+    const basis = planetaryHours(corpus, start, { latitude: lat, longitude: lon }).basis;
+
+    // Phases default to the four cardinal ones: those are what people ask, and returning all eight
+    // would bury the answer in crescents.
+    const knownPhases = new Set(MOON_PHASES.map((p) => p.id));
+    const wanted =
+      phase === undefined
+        ? ['full_moon', 'new_moon', 'first_quarter', 'last_quarter']
+        : (Array.isArray(phase) ? phase : [phase]).map((p) => String(p).trim().toLowerCase());
+    const unknownPhases = wanted.filter((p) => !knownPhases.has(p));
+    if (unknownPhases.length > 0) {
+      return fail(
+        'bad_request',
+        `Unknown phase \`${unknownPhases.join('`, `')}\`.`,
+        `Phases: ${[...knownPhases].join(', ')}.`,
+      );
+    }
+    const phases = [...new Set(wanted)]
+      .map((id) => nextMoonPhase(start, id))
+      .filter(Boolean)
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    // Whole days between local calendar dates: on the festival itself that is 0, not -1.
+    const daysBetween = (a, b) =>
+      Math.round((new Date(a).setHours(0, 0, 0, 0) - new Date(b).setHours(0, 0, 0, 0)) / 86400000);
+    const sabbats = sabbatsInRange(corpus, start, end).map(({ when: at, ...rest }) => ({
+      ...rest,
+      days_away: daysBetween(at, start),
+    }));
+
+    const planetWanted = planet === undefined || planet === null || planet === '' ? null : String(planet).trim().toLowerCase();
+    if (planetWanted && !CHALDEAN_ORDER.includes(planetWanted)) {
+      return fail(
+        'bad_request',
+        `\`${planet}\` is not one of the seven planetary rulers.`,
+        `Use one of: ${CHALDEAN_ORDER.join(', ')}.`,
+      );
+    }
+    const hour = planetWanted
+      ? nextPlanetaryHour(corpus, planetWanted, { from: start, latitude: lat, longitude: lon, daylightOnly: Boolean(daylightOnly) })
+      : null;
+
+    let workingBlock;
+    if (working !== undefined && working !== null && working !== '') {
+      const id = String(working).trim().toLowerCase();
+      const found = (corpus.collectionByFile.get('core_workings.json')?.entries ?? []).find((e) => e.id === id);
+      if (!found) {
+        const near = runSearch(docs, working, { limit: 3 }).results;
+        return fail(
+          'not_found',
+          `No working with the id \`${working}\`.`,
+          near.length
+            ? `Did you mean: ${near.map((h) => h.doc.ref.entry.id).join(', ')}?`
+            : 'Only `core_workings.json` is scored; call `list?file=core_workings` to see all 49.',
+        );
+      }
+      workingBlock = {
+        id: found.id,
+        name: found.name,
+        windows: workingWindows(corpus, found, {
+          from: start,
+          days: horizon,
+          latitude: lat,
+          longitude: lon,
+          hemisphere,
+          limit: Math.min(20, Math.max(1, Number(limit) || 5)),
+        }),
+      };
+    }
+
+    return {
+      ...meta(),
+      at: start.toISOString(),
+      horizon_days: horizon,
+      basis,
+      moon: { now: moonPhase(start), next: phases },
+      sabbats,
+      ...(planetWanted ? { hour } : {}),
+      ...(workingBlock ? { working: workingBlock } : {}),
+      ...(planetWanted && !hour
+        ? { hint: 'No such hour within 7 days. Try without `daylight_only`.' }
+        : {}),
+      caveats: [
+        basis === 'approximation'
+          ? 'No latitude/longitude supplied: hour boundaries use a flat 6am/6pm and can be a couple of hours out.'
+          : 'Sunrise and sunset computed for the supplied latitude/longitude.',
+        'Phase dates come from the mean synodic month and are accurate to about a day. The instant given is the middle of the phase window — opposition for the full moon, conjunction for the new — not an almanac time.',
+        ...(workingBlock
+          ? [
+              'Working windows skip the moon-sign factor (there is no ephemeris here), so percentages rank against each other within this response, not against the website\'s absolute scores.',
+            ]
+          : []),
       ],
     };
   }
@@ -605,6 +745,7 @@ export function createSurface(options) {
     path,
     list,
     timing,
+    when,
     fits,
     collections: collectionsMeta,
     provenanceOf,

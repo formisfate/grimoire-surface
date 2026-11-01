@@ -180,6 +180,35 @@ export const TOOLS = [
       additionalProperties: false,
     },
   },
+  {
+    name: 'grimoire_when',
+    description:
+      'The forward-looking half of timing: what is coming, and when. Returns the next full moon, new moon and quarters (dates, not almanac times), every sabbat within the horizon, and — if you name one — the next hour of a planet. Name a working and it returns the hours in the coming days where that working\'s own election fits best, ranked, with the reasons. Use this for "when should I do X" and "how long until Y"; `grimoire_timing` answers only "now".',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        from: { type: 'string', description: 'Optional ISO 8601 instant to look forward from. Defaults to now.' },
+        days: { type: 'number', description: 'How far ahead to look, in days (default 30, max 90).' },
+        latitude: { type: 'number', description: 'Optional. Decimal degrees, south negative. Improves hour boundaries.' },
+        longitude: { type: 'number', description: 'Optional.' },
+        hemisphere: { type: 'string', enum: ['northern', 'southern'], description: 'Optional. Inferred from latitude when omitted.' },
+        planet: {
+          type: 'string',
+          enum: ['sun', 'moon', 'mars', 'mercury', 'jupiter', 'venus', 'saturn'],
+          description: 'Optional. Return the next hour ruled by this planet.',
+        },
+        daylight_only: { type: 'boolean', description: 'Optional. Only count hours between sunrise and sunset.' },
+        phase: {
+          type: 'string',
+          description:
+            'Optional. One moon phase id — full_moon, new_moon, first_quarter, last_quarter, waxing_crescent, waxing_gibbous, waning_gibbous, waning_crescent. Defaults to the four cardinal ones. An array is also accepted.',
+        },
+        working: { type: 'string', description: 'Optional. A `core_workings` id, e.g. `protection`. Returns the best windows for it in the horizon.' },
+        limit: { type: 'number', description: 'Maximum windows to return when `working` is given (default 5, max 20).' },
+      },
+      additionalProperties: false,
+    },
+  },
 ];
 
 export const TOOL_NAMES = new Set(TOOLS.map((t) => t.name));

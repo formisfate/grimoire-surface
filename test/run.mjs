@@ -24,6 +24,7 @@ import { fileURLToPath } from 'node:url';
 import { loadCorpus, buildCorpus, isSystemEntry } from '../src/corpus.mjs';
 import { createSurface } from '../src/query.mjs';
 import { TOOLS } from '../src/tools.mjs';
+import { moonPhase } from '../src/timing.mjs';
 import { buildBundle, readBundle, bundleToCorpusInput } from '../src/bundle.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -263,6 +264,81 @@ check('workings rank deterministically', () => {
   assert(a.workings.length > 0, 'ranked nothing');
 });
 
+check('fits actually scores the day', () => {
+  // 2026-10-31 is a Saturday. Until 2026-11-01 the surface passed the planetary ruler (`saturn`)
+  // where the corpus's `days` hold weekday names (`saturday`), so the heaviest factor — 25 points —
+  // could never match and every ranking was missing its main signal.
+  const r = surface.fits({
+    date: fixtures.timing.at,
+    latitude: fixtures.timing.latitude,
+    longitude: fixtures.timing.longitude,
+    limit: 10,
+  });
+  assert(r.conditions.weekday === 'saturday', `weekday was ${r.conditions.weekday}`);
+  assert(
+    r.workings.some((w) => w.factors.find((f) => f.name === 'Day')?.matched),
+    'no working matched the day at all',
+  );
+});
+
+console.log('\nWhen (forward-looking)');
+
+check('a phase date really is that phase', () => {
+  const r = surface.when({ from: fixtures.when.at });
+  assert(!r.error, `errored: ${r.error?.message}`);
+  assert(r.moon.next.length === 4, `expected the 4 cardinal phases, got ${r.moon.next.length}`);
+  for (const p of r.moon.next) {
+    const actual = moonPhase(new Date(p.date));
+    assert(actual.id === p.id, `${p.id} at ${p.date} is actually ${actual.id}`);
+    assert(p.days_away > 0, `${p.id} is not in the future`);
+  }
+});
+
+check('sabbats land on their own date, not a day early', () => {
+  // The date used to be formatted through toISOString, which is UTC — Samhain showed as 30 October
+  // in Sydney. A festival date is a local calendar fact.
+  const r = surface.when({ from: fixtures.when.sabbat_from, days: fixtures.when.sabbat_days });
+  assert(!r.error, `errored: ${r.error?.message}`);
+  const yule = r.sabbats.find((s) => s.id === 'yule');
+  assert(yule, `yule not in ${r.sabbats.map((s) => s.id).join(', ') || 'nothing'}`);
+  assert(yule.date === '2026-12-21', `yule was ${yule.date}`);
+  assert(yule.days_away > 0, 'yule was not ahead');
+});
+
+check('the next hour of a planet is real and ahead', () => {
+  const r = surface.when({ from: fixtures.when.at, planet: fixtures.when.planet });
+  assert(!r.error, `errored: ${r.error?.message}`);
+  assert(r.hour?.planet === fixtures.when.planet, 'no hour for the requested planet');
+  assert(new Date(r.hour.start) > new Date(fixtures.when.at), 'the hour is in the past');
+  assert(r.hour.hours_away <= 24, `${r.hour.hours_away}h away, expected within a day`);
+});
+
+check('working windows are ahead, ranked, and weekday-consistent', () => {
+  const r = surface.when({ from: fixtures.when.at, working: fixtures.when.working, days: 30, limit: 5 });
+  assert(!r.error, `errored: ${r.error?.message}`);
+  const windows = r.working.windows;
+  assert(windows.length > 0, 'no windows returned');
+  for (let i = 1; i < windows.length; i += 1) {
+    assert(windows[i - 1].percentage >= windows[i].percentage, 'windows are not ranked');
+  }
+  for (const w of windows) {
+    // `>=` because an hour that begins exactly at `from` is current, not past.
+    assert(new Date(w.start) >= new Date(fixtures.when.at), 'a window is in the past');
+    assert(new Date(w.end) > new Date(fixtures.when.at), 'a window ends before it starts');
+    const weekday = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][
+      new Date(w.start).getDay()
+    ];
+    assert(w.conditions.weekday === weekday, `${w.date} says ${w.conditions.weekday}, actually ${weekday}`);
+  }
+});
+
+check('when rejects what it cannot answer', () => {
+  assert(surface.when({ phase: 'blue_moon' }).error?.code === 'bad_request', 'a made-up phase was accepted');
+  assert(surface.when({ planet: 'earth' }).error?.code === 'bad_request', 'a non-ruler was accepted');
+  assert(surface.when({ working: 'nope_xyz' }).error?.code === 'not_found', 'a missing working was accepted');
+  assert(surface.when({ from: 'not-a-date' }).error?.code === 'bad_request', 'a bad date was accepted');
+});
+
 console.log('\nEquivalence (files vs bundled mirror)');
 
 check('the two data paths agree on the corpus version', () => {
@@ -396,6 +472,7 @@ const mcpCalls = [
   { name: 'grimoire_path', args: { from: 'basil', to: 'protection' } },
   { name: 'grimoire_list', args: { file: 'stones' } },
   { name: 'grimoire_timing', args: { date: fixtures.timing.at } },
+  { name: 'grimoire_when', args: { from: fixtures.when.at, planet: 'venus' } },
   { name: 'grimoire_fits', args: { date: fixtures.timing.at, limit: 3 } },
 ];
 

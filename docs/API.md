@@ -366,6 +366,69 @@ are we in", not an ephemeris.
 
 ---
 
+## `GET /when`
+
+The forward-looking half of `/timing`: the next phases, the sabbats ahead, the next hour of a
+planet, and the best windows for a working.
+
+| Param | Default | Notes |
+|---|---|---|
+| `from` | now | ISO 8601 instant to look forward from |
+| `days` | `30` | Horizon, max 90 |
+| `lat`, `lon` | — | Improves hour boundaries |
+| `planet` | — | `sun` … `saturn`; returns the next hour it rules |
+| `daylight_only` | — | `true` to skip night hours |
+| `phase` | — | One phase id; defaults to the four cardinal ones |
+| `working` | — | A `core_workings` id; returns ranked windows |
+| `limit` | `5` | Windows to return, max 20 |
+
+```bash
+curl -G 'https://ensoul.so/api/grimoire/when' \
+  --data-urlencode 'from=2026-10-31T20:00:00+11:00' \
+  --data-urlencode 'planet=venus' \
+  --data-urlencode 'working=protection' \
+  --data-urlencode 'days=30'
+```
+
+```json
+{
+  "at": "2026-10-31T09:00:00.000Z",
+  "horizon_days": 30,
+  "basis": "approximation",
+  "moon": {
+    "now": { "id": "waning_gibbous", "illumination": 72.2, "age_days": 18.9 },
+    "next": [
+      { "id": "last_quarter", "date": "2026-11-02T12:49:52.253Z", "days_away": 2.16, "illumination": 50 },
+      { "id": "new_moon", "date": "2026-11-09T21:57:55.130Z", "days_away": 9.54, "illumination": 0 },
+      { "id": "first_quarter", "date": "2026-11-17T07:05:07.130Z", "days_away": 16.92, "illumination": 50 },
+      { "id": "full_moon", "date": "2026-11-24T16:12:19.130Z", "days_away": 24.3, "illumination": 100 }
+    ]
+  },
+  "sabbats": [],
+  "hour": { "planet": "venus", "number": 19, "day": false, "hours_away": 4 },
+  "working": {
+    "id": "protection",
+    "name": "Protection",
+    "windows": [
+      { "date": "2026-11-03", "hour": { "planet": "mars" }, "percentage": 100,
+        "matched": ["Day", "Moon", "Hour", "Season", "Time"],
+        "conditions": { "weekday": "tuesday", "planetary_day": "mars", "moon_phase": "last_quarter" } }
+    ]
+  }
+}
+```
+
+`sabbats: []` is a real answer — none falls in the horizon. An empty array is not an error.
+
+Phase dates are the **middle** of the phase window on the mean synodic month, so they are good to
+about a day and are not almanac times; the response says so in `caveats`.
+
+Each window's `conditions.weekday` is the weekday of the **instant**, which is what `/fits` scores,
+so the two verbs agree about the same moment even for a pre-dawn hour that still belongs to the
+previous planetary cycle.
+
+---
+
 ## `GET /fits`
 
 Rank the corpus's 49 core workings against the conditions.
@@ -383,13 +446,16 @@ curl 'https://ensoul.so/api/grimoire/fits?lat=-33.87&lon=151.21&limit=5'
 ```json
 {
   "conditions": {
-    "planetary_day": "saturn", "planetary_hour": "moon",
+    "weekday": "saturday", "planetary_day": "saturn", "planetary_hour": "moon",
     "moon_phase": "waning_gibbous", "moon_sign": null,
     "season": "spring", "time_of_day": "evening", "sabbat": "samhain"
   },
   "workings": [
-    { "id": "divination", "name": "Divination", "percentage": 64,
-      "factors": [ { "name": "Hour", "weight": 20, "matched": true, "points": 20 } ] }
+    { "id": "funeral", "name": "Funeral", "score": 80, "maxScore": 110, "percentage": 73,
+      "factors": [
+        { "name": "Day", "weight": 25, "matched": true, "points": 25 },
+        { "name": "Hour", "weight": 20, "matched": false, "points": 0 }
+      ] }
   ]
 }
 ```
@@ -398,6 +464,11 @@ The weights are the website's own, so the ranking here and the ranking at
 `ensoul.so/grimoire/workings` are the same: day 25, moon 25 (−10 if the phase is one to avoid),
 hour 20, season 15, moon sign 10, time of day 10, sabbat bonus 15. The `factors` array is the
 breakdown, so you can see *why* something ranked where it did rather than trusting a number.
+
+**`weekday` is what the Day factor compares**, because that is what `optimal_timing.days` holds; the
+ruling planet is reported separately as `planetary_day`. Both are returned because they are easy to
+confuse, and confusing them is exactly what happened: before 2026-11-01 the surface sent the planet,
+the factor never matched, and every ranking was missing its heaviest signal.
 
 ---
 

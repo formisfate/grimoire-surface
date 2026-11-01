@@ -140,6 +140,14 @@
     "expect_records": 4,
     "why": "one id, four catalogues — `entry` must return every one in full, not just the first"
   },
+  "when": {
+    "$comment": "A fixed instant, so phase dates and windows cannot drift with the clock. 2026-10-31 20:00 Sydney is a Saturday night; the last quarter is two days off, and the next sabbat inside a 60-day horizon from 1 November is Yule on the 21st.",
+    "at": "2026-10-31T20:00:00+11:00",
+    "sabbat_from": "2026-11-01T09:00:00+11:00",
+    "sabbat_days": 60,
+    "planet": "venus",
+    "working": "protection"
+  },
   "must_resolve": [
     {
       "id": "wands",
