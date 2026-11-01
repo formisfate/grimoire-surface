@@ -310,6 +310,35 @@ check('fits actually scores the day', () => {
   );
 });
 
+check('rituals with an election are ranked, and only on what they state', () => {
+  const full = surface.fits({
+    date: '2026-11-24T20:00:00+11:00',
+    time_zone: 'Australia/Sydney',
+    catalogue: 'rituals',
+  });
+  assert(!full.error, `errored: ${full.error?.message}`);
+  assert(full.catalogue === 'rituals', `catalogue was ${full.catalogue}`);
+  assert(full.rituals.length === 6, `${full.rituals.length} rituals, expected the 6 with an election`);
+  assert(full.rituals[0].id === 'drawing_down_the_moon', `top was ${full.rituals[0].id}`);
+  assert(full.rituals[0].percentage === 100, `drawing down scored ${full.rituals[0].percentage}%`);
+
+  const dark = surface.fits({
+    date: '2026-11-09T12:00:00+11:00',
+    time_zone: 'Australia/Sydney',
+    catalogue: 'rituals',
+  });
+  const perfect = dark.rituals.filter((r) => r.percentage === 100).map((r) => r.id).sort();
+  assert(
+    perfect.includes('consecration_of_tools') && perfect.includes('ancestor_altar'),
+    `new moon ranked ${perfect.join(', ')} at 100%`,
+  );
+
+  assert(
+    full.caveats.some((c) => /6 of the 26/.test(c)),
+    'no caveat explaining that 20 rituals have no election',
+  );
+});
+
 check('fits ranks talismans on what they actually state', () => {
   const r = surface.fits({
     date: fixtures.timing.at,

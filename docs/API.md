@@ -52,7 +52,7 @@ What the corpus is: sections, files, entry counts, reference counts, and how add
 curl https://ensoul.so/api/grimoire/overview
 ```
 
-The `stats` block is the health check: `entries: 3062`, `references: 34999`,
+The `stats` block is the health check: `entries: 3062`, `references: 35010`,
 `dangling_references: 0`. Anything other than zero in `dangling_references` over time means the
 corpus has a broken join.
 
@@ -475,7 +475,7 @@ Rank the corpus's 49 core workings against the conditions.
 |---|---|---|
 | `date`, `lat`, `lon` | now | As `/timing` |
 | `moon_sign` | — | If you know it. Without it the sign factor is **skipped**, not failed. |
-| `catalogue` | `workings` | `workings` or `talismans` |
+| `catalogue` | `workings` | `workings`, `talismans`, or `rituals` |
 | `time_zone` | — | IANA zone; weekday, time of day, season and sabbat dates are judged in it. Defaults to the server's |
 | `limit` | `10` | |
 

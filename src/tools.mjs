@@ -184,7 +184,7 @@ export const TOOLS = [
   {
     name: 'grimoire_fits',
     description:
-      'Rank what the corpus says suits a set of conditions: which of the 49 core workings fit this day, this hour, this moon, this season — or, with `catalogue: "talismans"`, which of the seven planetary talismans is for now (only its day and hour are scored, because those are the only elections a talisman states). With no arguments it uses the current timing, making "what should I be doing right now" one call. Every result carries the score breakdown so you can see why it ranked where it did.',
+      'Rank what the corpus says suits a set of conditions: which of the 49 core workings fit this day, this hour, this moon, this season — or, with `catalogue: "talismans"`, which of the seven planetary talismans is for now (only its day and hour are scored), or with `catalogue: "rituals"`, which of the six rituals that declare an election suits the moment (only the factors they state are scored). With no arguments it uses the current timing, making "what should I be doing right now" one call. Every result carries the score breakdown so you can see why it ranked where it did.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -195,8 +195,9 @@ export const TOOLS = [
         time_zone: { type: 'string', description: "Optional IANA time zone, e.g. Australia/Sydney. Without it, weekday, time of day, season and sabbat dates use the server's zone." },
         catalogue: {
           type: 'string',
-          enum: ['workings', 'talismans'],
-          description: 'What to rank: the 49 core workings (default) or the 7 planetary talismans.',
+          enum: ['workings', 'talismans', 'rituals'],
+          description:
+            'What to rank: the 49 core workings (default), the 7 planetary talismans, or the 6 rituals that declare an election.',
         },
         limit: { type: 'number', description: 'Maximum results to return (default 10).' },
       },

@@ -718,10 +718,16 @@ export function createSurface(options) {
     // against those. This passed the *planetary ruler* ('saturn') until 2026-11-01, so the Day
     // factor — the heaviest at 25 points — could never match and every working was ranked without it.
     const when = new Date(snap.at);
-    const wantsTalismans = /^(talismans?|planetary_talismans)$/i.test(String(catalogue).trim());
+    const wanted = String(catalogue).trim();
+    const wantsTalismans = /^(talismans?|planetary_talismans)$/i.test(wanted);
+    const wantsRituals = /^rituals?$/i.test(wanted);
+    // Only rituals that declare an election can be scored: the rest say "before any working" or
+    // "daily practice", which is a statement about sequence, not about the calendar.
     const workings = wantsTalismans
       ? (corpus.collectionByFile.get('planetary_talismans.json')?.entries ?? []).map(talismanAsWorking)
-      : (corpus.collectionByFile.get('core_workings.json')?.entries ?? []);
+      : wantsRituals
+        ? (corpus.collectionByFile.get('rituals.json')?.entries ?? []).filter((e) => e.optimal_timing)
+        : (corpus.collectionByFile.get('core_workings.json')?.entries ?? []);
     const conditions = {
       dayOfWeek: dayOfWeek(when, parsedZone.zone),
       moonPhase: snap.moon.id,
@@ -748,19 +754,23 @@ export function createSurface(options) {
         sabbat: snap.sabbat ? snap.sabbat.id : null,
       },
       basis: snap.basis,
-      catalogue: wantsTalismans ? 'planetary_talismans' : 'core_workings',
+      catalogue: wantsTalismans ? 'planetary_talismans' : wantsRituals ? 'rituals' : 'core_workings',
       count: Math.min(clamp(limit, 10), ranked.length),
-      [wantsTalismans ? 'talismans' : 'workings']: ranked.slice(0, clamp(limit, 10)),
+      [wantsTalismans ? 'talismans' : wantsRituals ? 'rituals' : 'workings']: ranked.slice(0, clamp(limit, 10)),
       caveats: [
         ...snap.caveats,
         ...(wantsTalismans
           ? [
               'A talisman names only a day and an hour in the corpus, so only those two factors are scored. The moon, season, sign and time of day are not scored rather than scored as misses, which is why a talisman can reach 100% with fewer factors than a working.',
             ]
-          : [
-              ...(conditions.moonSign ? [] : ['No moon sign supplied, so the sign factor was skipped rather than scored as a miss.']),
-              'Ranked from `core_workings.json`. Rituals are not ranked: most have no calendar election at all ("before any working", "daily practice"), and the rest state theirs in prose rather than fields, so scoring them would invent correspondences. `catalogue: "talismans"` ranks the seven planetary talismans.',
-            ]),
+          : wantsRituals
+            ? [
+                'Ranked from the rituals that declare an election — 6 of the 26. The other 20 are procedural ("before any working", "daily practice") and have no calendar timing to score. Only the factors a ritual states are scored, so percentages are not comparable with the workings.',
+              ]
+            : [
+                ...(conditions.moonSign ? [] : ['No moon sign supplied, so the sign factor was skipped rather than scored as a miss.']),
+                'Ranked from `core_workings.json`. For the rituals that declare an election use `catalogue: "rituals"`; for the planetary talismans, `catalogue: "talismans"`.',
+              ]),
       ],
     };
   }

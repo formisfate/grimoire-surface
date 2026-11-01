@@ -511,7 +511,10 @@ export function scoreWorkings(workings, conditions) {
         factors.push({ name, weight, matched, points: matched ? weight : 0 });
       };
 
-      tally('Day', 25, (t.days ?? []).includes(dow));
+      // Only factors the entry actually states are scored. A ritual that says "at the full moon"
+      // has no opinion about the day or the hour, and counting that silence as a miss would rank it
+      // by information the corpus never had.
+      if ((t.days ?? []).length) tally('Day', 25, t.days.includes(dow));
       const avoid = (t.avoid_phases ?? []).includes(phase);
       if (avoid) {
         maxScore += 25;
@@ -523,7 +526,9 @@ export function scoreWorkings(workings, conditions) {
         // for information the corpus never had.
         tally('Moon', 25, t.moon_phases.includes(phase));
       }
-      tally('Hour', 20, (t.planetary_hours ?? []).includes(planetaryHourPlanet));
+      if ((t.planetary_hours ?? []).length) {
+        tally('Hour', 20, t.planetary_hours.includes(planetaryHourPlanet));
+      }
       if ((t.best_seasons ?? []).length) tally('Season', 15, t.best_seasons.includes(seasonName));
       if ((t.zodiac_signs ?? []).length && moonSign) {
         tally('Sign', 10, t.zodiac_signs.includes(String(moonSign).toLowerCase()));
@@ -537,7 +542,10 @@ export function scoreWorkings(workings, conditions) {
         const overlap =
           themes.some((th) => kws.some((kw) => th.includes(kw) || kw.includes(th))) ||
           sabWork.some((sw) => kws.some((kw) => sw.includes(kw) || kw.includes(sw)));
-        if (overlap) {
+        // An entry may also name the festival outright (`sabbats: ["samhain"]`), which is a
+        // stronger claim than sharing vocabulary with it.
+        const named = (t.sabbats ?? []).map((s) => String(s).toLowerCase()).includes(String(sabbat.id).toLowerCase());
+        if (overlap || named) {
           maxScore += 15;
           score += 15;
           factors.push({ name: 'Sabbat', weight: 15, matched: true, points: 15 });
