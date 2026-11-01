@@ -143,6 +143,28 @@ function fieldPathsOf(node, out, path, inArray, depth) {
   }
 }
 
+/**
+ * A talisman, shaped for the scorer.
+ *
+ * A talisman names a day and an hour and no other election, so only those two factors can honestly
+ * be scored — the scorer skips the rest because they are unstated rather than wrong.
+ */
+function talismanAsWorking(t) {
+  const lower = (v) => (typeof v === 'string' && v.trim() ? v.trim().toLowerCase() : null);
+  const day = lower(t.day);
+  const hour = lower(t.hour);
+  return {
+    id: t.id,
+    name: t.name,
+    category: 'talisman',
+    keywords: t.magical_uses ?? [],
+    optimal_timing: {
+      days: day ? [day] : [],
+      planetary_hours: hour ? [hour] : [],
+    },
+  };
+}
+
 export function createSurface(options) {
   // Either a path (the MCP server, reading a checkout) or the already-parsed corpus (the website,
   // which bundles its own mirror and has no checkout at runtime). Same object from here on.
@@ -686,6 +708,7 @@ export function createSurface(options) {
     season: seasonOverride,
     limit = 10,
     time_zone: timeZone,
+    catalogue = 'workings',
   } = {}) {
     const snap = timing({ date, latitude, longitude, hemisphere, time_zone: timeZone });
     if (snap.error) return snap;
@@ -695,7 +718,10 @@ export function createSurface(options) {
     // against those. This passed the *planetary ruler* ('saturn') until 2026-11-01, so the Day
     // factor — the heaviest at 25 points — could never match and every working was ranked without it.
     const when = new Date(snap.at);
-    const workings = corpus.collectionByFile.get('core_workings.json')?.entries ?? [];
+    const wantsTalismans = /^(talismans?|planetary_talismans)$/i.test(String(catalogue).trim());
+    const workings = wantsTalismans
+      ? (corpus.collectionByFile.get('planetary_talismans.json')?.entries ?? []).map(talismanAsWorking)
+      : (corpus.collectionByFile.get('core_workings.json')?.entries ?? []);
     const conditions = {
       dayOfWeek: dayOfWeek(when, parsedZone.zone),
       moonPhase: snap.moon.id,
@@ -722,12 +748,19 @@ export function createSurface(options) {
         sabbat: snap.sabbat ? snap.sabbat.id : null,
       },
       basis: snap.basis,
+      catalogue: wantsTalismans ? 'planetary_talismans' : 'core_workings',
       count: Math.min(clamp(limit, 10), ranked.length),
-      workings: ranked.slice(0, clamp(limit, 10)),
+      [wantsTalismans ? 'talismans' : 'workings']: ranked.slice(0, clamp(limit, 10)),
       caveats: [
         ...snap.caveats,
-        ...(conditions.moonSign ? [] : ['No moon sign supplied, so the sign factor was skipped rather than scored as a miss.']),
-        'Only `core_workings.json` is ranked; rituals and talismans are in their own catalogues.',
+        ...(wantsTalismans
+          ? [
+              'A talisman names only a day and an hour in the corpus, so only those two factors are scored. The moon, season, sign and time of day are not scored rather than scored as misses, which is why a talisman can reach 100% with fewer factors than a working.',
+            ]
+          : [
+              ...(conditions.moonSign ? [] : ['No moon sign supplied, so the sign factor was skipped rather than scored as a miss.']),
+              'Ranked from `core_workings.json`. Rituals are not ranked: most have no calendar election at all ("before any working", "daily practice"), and the rest state theirs in prose rather than fields, so scoring them would invent correspondences. `catalogue: "talismans"` ranks the seven planetary talismans.',
+            ]),
       ],
     };
   }

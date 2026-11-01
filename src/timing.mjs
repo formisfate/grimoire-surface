@@ -517,8 +517,11 @@ export function scoreWorkings(workings, conditions) {
         maxScore += 25;
         score -= 10;
         factors.push({ name: 'Moon', weight: 25, matched: false, points: -10, avoid: true });
-      } else {
-        tally('Moon', 25, (t.moon_phases ?? []).includes(phase));
+      } else if ((t.moon_phases ?? []).length) {
+        // Only scored when the entry actually states a moon election. A talisman names a day and an
+        // hour and says nothing about the moon; counting that silence as a miss would rank it down
+        // for information the corpus never had.
+        tally('Moon', 25, t.moon_phases.includes(phase));
       }
       tally('Hour', 20, (t.planetary_hours ?? []).includes(planetaryHourPlanet));
       if ((t.best_seasons ?? []).length) tally('Season', 15, t.best_seasons.includes(seasonName));

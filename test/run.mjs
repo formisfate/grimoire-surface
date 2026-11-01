@@ -310,6 +310,25 @@ check('fits actually scores the day', () => {
   );
 });
 
+check('fits ranks talismans on what they actually state', () => {
+  const r = surface.fits({
+    date: fixtures.timing.at,
+    latitude: fixtures.timing.latitude,
+    longitude: fixtures.timing.longitude,
+    time_zone: 'Australia/Sydney',
+    catalogue: 'talismans',
+  });
+  assert(!r.error, `errored: ${r.error?.message}`);
+  assert(r.catalogue === 'planetary_talismans', `catalogue was ${r.catalogue}`);
+  assert(r.talismans?.length === 7, `${r.talismans?.length} talismans, expected 7`);
+  // 2026-10-31 is a Saturday, and the Saturn talisman is the one for Saturday.
+  assert(r.talismans[0].id === 'saturn', `top talisman was ${r.talismans[0].id}`);
+  assert(
+    r.caveats.some((c) => /only a day and an hour/.test(c)),
+    'no caveat saying only two factors were scored',
+  );
+});
+
 console.log('\nWhen (forward-looking)');
 
 check('a phase date really is that phase', () => {

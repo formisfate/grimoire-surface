@@ -475,6 +475,7 @@ Rank the corpus's 49 core workings against the conditions.
 |---|---|---|
 | `date`, `lat`, `lon` | now | As `/timing` |
 | `moon_sign` | — | If you know it. Without it the sign factor is **skipped**, not failed. |
+| `catalogue` | `workings` | `workings` or `talismans` |
 | `time_zone` | — | IANA zone; weekday, time of day, season and sabbat dates are judged in it. Defaults to the server's |
 | `limit` | `10` | |
 
@@ -503,6 +504,10 @@ The weights are the website's own, so the ranking here and the ranking at
 `ensoul.so/grimoire/workings` are the same: day 25, moon 25 (−10 if the phase is one to avoid),
 hour 20, season 15, moon sign 10, time of day 10, sabbat bonus 15. The `factors` array is the
 breakdown, so you can see *why* something ranked where it did rather than trusting a number.
+
+`catalogue=talismans` ranks the seven planetary talismans under a `talismans` key instead. Only their
+day and hour are scored, because those are the only elections the corpus states for them; the
+percentages are not comparable with the workings'.
 
 **`weekday` is what the Day factor compares**, because that is what `optimal_timing.days` holds; the
 ruling planet is reported separately as `planetary_day`. Both are returned because they are easy to

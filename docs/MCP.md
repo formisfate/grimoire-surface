@@ -356,6 +356,7 @@ lookup failed.
 | `date`, `latitude`, `longitude` | | as `/timing` |
 | `moon_sign` | string | optional; skips the sign factor if absent |
 | `time_zone` | string | IANA zone, e.g. `Australia/Sydney`. Weekday, time of day, season and sabbat dates are judged in it; without it they use the server's zone and `caveats` says which |
+| `catalogue` | string | `workings` (default) or `talismans` |
 | `limit` | number | default 10 |
 
 Ranks the 49 core workings against the conditions. With no arguments it uses now, so "what should I
@@ -363,6 +364,12 @@ be doing right now" is one call. Every result carries its `factors` breakdown.
 
 If you do not supply `moon_sign`, that factor is **skipped** rather than scored as a miss — so a
 working is not penalised for your not knowing something.
+
+With `catalogue: "talismans"` it ranks the seven planetary talismans instead, under a `talismans`
+key. A talisman states a day and an hour and nothing else, so only those two factors are scored —
+the moon, season, sign and time of day are skipped rather than counted as misses. That is why a
+talisman can reach 100% with fewer factors than a working; the percentages are not comparable
+across the two catalogues.
 
 The **Day** factor compares the weekday name (`saturday`), which is what the corpus's
 `optimal_timing.days` holds, and `conditions` reports both `weekday` and `planetary_day` so the two
