@@ -6,12 +6,18 @@
 // graph was built. This module rebuilds that graph from the corpus alone, so that anything which
 // consumes it (the MCP server, the HTTP API, the bundle) sees the same edges the website does.
 //
-// Three questions, which is all a caller ever wants:
+// Four questions, which is all a caller ever wants:
 //
 //   entriesById(id)      what does this id name? (an id can exist in two catalogues — `sage` is an
 //                        archetype, a herb and a resin — so this returns every entry carrying it)
 //   forwardRefs(entry)   what does this entry point at, and through which field?
 //   backlinks(id)        what points back at it?
+//   pathBetween(a, b)    how are these two connected, and through which fields?
+//
+// The fourth was added on 2026-11-01, after the surface had a one-hop `related` and a README whose
+// headline example needed two hops. Every path in this corpus is labelled by the field that makes
+// it — `basil —planet→ mars —planets(in)→ protection` — so a path is an explanation, not just a
+// list of ids. Note the second edge is a *backlink*: a real chain turns around.
 //
 // What counts as a reference is NOT decided here. It is `joins.json`, via `src/joins.mjs`. That
 // separation is the whole point: without it every use of the word "protection" would look like a
@@ -130,4 +136,95 @@ export function buildGraph(corpus) {
     forwardRefs: (entry) => forward.get(entry) ?? [],
     backlinks: (id) => back.get(id) ?? [],
   };
+}
+
+/**
+ * One step out from an id, as directed edges.
+ *
+ * `out` follows the entry's own references (what it points at); `in` follows the reverse index (what
+ * points at it). `both` follows both, and it is the default because the corpus's own headline
+ * question needs it: basil reaches Mars forward, but the workings that call for Mars are reached
+ * *backwards* from Mars — a strict forward walk covers half of that chain and then stops.
+ *
+ * Every edge keeps the field that made it, deduplicated, so `basil —planet→ mars` and
+ * `basil —pairs_with→ sage` are different edges rather than the same neighbour twice.
+ */
+export function neighbours(corpus, graph, id, { direction = 'both' } = {}) {
+  const seen = new Set();
+  const out = [];
+  const push = (targetId, field, dir) => {
+    const key = `${targetId}\u0000${field}\u0000${dir}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push({ id: targetId, field, direction: dir });
+  };
+
+  if (direction !== 'in') {
+    for (const ref of corpus.byId.get(id) ?? []) {
+      for (const f of graph.forwardRefs(ref.entry)) {
+        for (const t of f.targets) push(t.entry.id, f.field, 'out');
+      }
+    }
+  }
+  if (direction !== 'out') {
+    for (const l of graph.backlinks(id)) push(l.entry.id, l.field, 'in');
+  }
+  return out;
+}
+
+/**
+ * Shortest paths between two ids, as edge lists.
+ *
+ * Breadth-first, so the first answer is the shortest one and `length` is trustworthy. Then the
+ * shortest-path DAG is walked to recover up to `maxPaths` of them, which matters because "how are
+ * these connected" almost never has one honest answer: basil reaches the working called Protection
+ * through Mars, through fire, through a herb it pairs with, and through two zodiac signs — five
+ * shortest paths, every one of them true. Returning only the first would tell a smaller truth than
+ * the corpus holds.
+ *
+ * Bounded on purpose. The corpus is dense — every entry reaches hundreds of others at two hops — so
+ * an unbounded search would answer "yes" to almost every pair and tell you nothing. `maxDepth` makes
+ * the answer honest about how far it looked.
+ */
+export function pathBetween(corpus, graph, from, to, { direction = 'both', maxDepth = 4, maxPaths = 3 } = {}) {
+  const dist = new Map([[from, 0]]);
+  const queue = [from];
+  let targetDepth = null;
+
+  for (let head = 0; head < queue.length; head += 1) {
+    const id = queue[head];
+    const d = dist.get(id);
+    // Only nodes strictly nearer than the target can lie on a shortest path to it, so once the
+    // target's depth is known there is nothing deeper worth expanding.
+    if (targetDepth !== null && d >= targetDepth) continue;
+    if (d >= maxDepth) continue;
+
+    for (const n of neighbours(corpus, graph, id, { direction })) {
+      if (dist.has(n.id)) continue;
+      dist.set(n.id, d + 1);
+      if (n.id === to) targetDepth = d + 1;
+      queue.push(n.id);
+    }
+  }
+
+  const paths = [];
+  if (dist.has(to)) {
+    // Recover paths that follow the BFS distance exactly one step at a time: any such walk is a
+    // shortest path, and revisiting is impossible because the distance strictly increases.
+    const walk = (id, steps) => {
+      if (paths.length >= maxPaths) return;
+      if (id === to) {
+        paths.push(steps);
+        return;
+      }
+      for (const n of neighbours(corpus, graph, id, { direction })) {
+        if (dist.get(n.id) !== dist.get(id) + 1) continue;
+        walk(n.id, [...steps, n]);
+        if (paths.length >= maxPaths) return;
+      }
+    };
+    walk(from, []);
+  }
+
+  return { paths, length: paths[0]?.length ?? null, explored: dist.size, direction };
 }

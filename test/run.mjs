@@ -133,6 +133,61 @@ for (const f of fixtures.searches) {
   });
 }
 
+for (const f of fixtures.finds) {
+  check(`find ${JSON.stringify(f.where)} in ${f.file}`, () => {
+    const r = surface.find({ file: f.file, where: f.where });
+    assert(!r.error, `errored: ${r.error?.message}`);
+    assert(r.total >= f.min_total, `only ${r.total} matches, expected at least ${f.min_total}`);
+    if (f.expect_contains) {
+      const ids = r.entries.map((x) => x.id);
+      assert(ids.includes(f.expect_contains), `${f.expect_contains} not among ${ids.join(', ')}`);
+    }
+  });
+}
+
+check('a wrong field name is named as wrong, with the real ones offered', () => {
+  // The failure mode this prevents: a typo reads as "nothing matches", and the caller concludes the
+  // corpus has no Mars herbs when the field is actually called `planet`.
+  const r = surface.find({ file: 'herbs.json', where: { planets: 'mars' } });
+  assert(r.error?.code === 'bad_request', `code was ${r.error?.code}`);
+  assert(/planet/.test(r.error.hint ?? ''), 'the hint did not list the fields that exist');
+});
+
+for (const f of fixtures.paths) {
+  check(`path ${f.from} → ${f.to}`, () => {
+    const r = surface.path({ from: f.from, to: f.to });
+    assert(!r.error, `errored: ${r.error?.message}`);
+    assert(r.found === (f.expect_found ?? true), `found was ${r.found}`);
+    if (f.expect_length !== undefined) {
+      assert(r.length === f.expect_length, `length ${r.length} !== ${f.expect_length}`);
+    }
+    if (f.expect_edges) {
+      const edges = r.paths[0].edges.map((e) => e.field);
+      assert(
+        JSON.stringify(edges) === JSON.stringify(f.expect_edges),
+        `edges ${edges.join(',')} !== ${f.expect_edges.join(',')}`,
+      );
+    }
+  });
+}
+
+check('path says it searched too shallowly rather than calling two things unrelated', () => {
+  const r = surface.path({ from: 'basil', to: 'protection', max_depth: 1 });
+  assert(r.found === false, 'claimed a path within one hop');
+  assert(r.hint, 'no hint about widening the search');
+});
+
+check('an ambiguous id returns every full record, not just the first', () => {
+  const f = fixtures.entry_ambiguity;
+  const r = surface.entry(f.id);
+  assert(!r.error, `errored: ${r.error?.message}`);
+  assert(r.ambiguous === true, 'did not report the ambiguity');
+  assert(r.records?.length === f.expect_records, `records ${r.records?.length} !== ${f.expect_records}`);
+  assert(r.records.every((x) => x._meta && x.id === f.id), 'a record lost its addressing');
+  const files = new Set(r.records.map((x) => x._meta.file));
+  assert(files.size === f.expect_records, 'the records are not distinct entries');
+});
+
 for (const f of fixtures.must_resolve) {
   check(`"${f.id}" resolves — ${f.why}`, () => {
     const refs = corpus.byId.get(f.id) ?? [];
@@ -335,8 +390,10 @@ const mcpCalls = [
   { name: 'grimoire_overview', args: {} },
   { name: 'grimoire_search', args: { query: 'protection', limit: 2 } },
   { name: 'grimoire_lookup', args: { query: 'basil' } },
+  { name: 'grimoire_find', args: { file: 'herbs', where: { planet: 'mars' }, limit: 2 } },
   { name: 'grimoire_entry', args: { id: 'mars' } },
   { name: 'grimoire_related', args: { id: 'mars', direction: 'out' } },
+  { name: 'grimoire_path', args: { from: 'basil', to: 'protection' } },
   { name: 'grimoire_list', args: { file: 'stones' } },
   { name: 'grimoire_timing', args: { date: fixtures.timing.at } },
   { name: 'grimoire_fits', args: { date: fixtures.timing.at, limit: 3 } },

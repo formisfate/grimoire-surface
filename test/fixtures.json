@@ -67,6 +67,79 @@
       "why": "no entry is called Goetia; the match is in body text, which is the point of full-text search"
     }
   ],
+  "finds": [
+    {
+      "file": "herbs.json",
+      "where": {
+        "planet": "mars"
+      },
+      "min_total": 40,
+      "expect_contains": "basil",
+      "why": "the structured question: every herb the corpus assigns to Mars"
+    },
+    {
+      "file": "herbs.json",
+      "where": {
+        "element": "fire",
+        "planet": "mars",
+        "tier": 1
+      },
+      "min_total": 5,
+      "expect_contains": "basil",
+      "why": "three fields are ANDed by default; basil is fire, Mars and tier 1"
+    },
+    {
+      "file": "core_workings.json",
+      "where": {
+        "optimal_timing.planets": "venus"
+      },
+      "min_total": 10,
+      "why": "a dotted path into a nested field, which is where the timing rules actually live"
+    },
+    {
+      "file": "herbs.json",
+      "where": {
+        "magical_uses": "protection"
+      },
+      "min_total": 100,
+      "why": "matching a value inside an array of vocabulary terms, not a reference"
+    }
+  ],
+  "paths": [
+    {
+      "from": "basil",
+      "to": "protection",
+      "expect_length": 2,
+      "expect_edges": [
+        "planet",
+        "planets"
+      ],
+      "why": "basil —planet→ mars —planets(in)→ protection: the second edge is a backlink, so a forward-only walk cannot find this"
+    },
+    {
+      "from": "sage",
+      "to": "hermes",
+      "expect_length": 2,
+      "why": "an aromatic herb reaches a deity through the god it is assigned to"
+    },
+    {
+      "from": "basil",
+      "to": "basil",
+      "expect_length": 0,
+      "why": "a thing is its own path; this must not hang or return not-found"
+    },
+    {
+      "from": "basil",
+      "to": "tower",
+      "expect_found": false,
+      "why": "tarot cards are graph islands — no reference connects them, and `path` must say so rather than implying the concepts are unrelated"
+    }
+  ],
+  "entry_ambiguity": {
+    "id": "sage",
+    "expect_records": 4,
+    "why": "one id, four catalogues — `entry` must return every one in full, not just the first"
+  },
   "must_resolve": [
     {
       "id": "wands",

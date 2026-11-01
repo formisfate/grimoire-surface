@@ -1,6 +1,6 @@
 # MCP server
 
-A [Model Context Protocol](https://modelcontextprotocol.io) server over stdio. Eight tools, no
+A [Model Context Protocol](https://modelcontextprotocol.io) server over stdio. Ten tools, no
 dependencies, no build step, no network access. It reads the corpus off disk.
 
 ---
@@ -142,6 +142,35 @@ Full-text, weighted. Names and ids score 10, keywords 5, the entry's one-liner 2
 Returns `mode: "all-terms"` when every word matched, `"any-term"` when the strict pass found nothing
 and it widened.
 
+### `grimoire_find`
+
+| Arg | Type | Notes |
+|---|---|---|
+| `where` | object | required — field → value(s) |
+| `file` | string | restrict to one catalogue |
+| `section` | string | restrict to one section |
+| `match` | `all` / `any` | default `all` |
+| `limit`, `offset` | number | default 50, max 200 |
+
+The structured query: not "what mentions Mars" but "what *is* Mars- ruled". Fields are ANDed, so
+`{"element":"fire","planet":"mars","tier":1}` is the seven herbs that are all three. A value may be
+an array meaning any-of for that field; a dotted key reaches into a nested object, which is where
+the timing rules live (`{"optimal_timing.planets":"venus"}`).
+
+Matching is case-insensitive and accepts either form of a value: `"new moon"` finds `new_moon`, and
+`"Mars"` finds `mars`.
+
+```json
+{ "where": { "planet": "mars" }, "file": "herbs" }
+```
+
+Returns the matches as compact entries plus `total` — the true count, not the page — so a caller can
+page or just report "52 herbs". An unknown field is an error that lists the fields that do exist:
+a typo would otherwise read as "nothing matches".
+
+`find` does **not** follow references. `{"planet":"mars"}` finds the herbs whose own `planet` field
+says Mars; the *workings* that call for Mars are reached with `related` or `path`.
+
 ### `grimoire_lookup`
 
 | Arg | Type | Notes |
@@ -166,6 +195,11 @@ The full record, unmodified, plus `references.out` (everything it points at, wit
 resolved targets) and `references.in` (everything that points at it, capped at 50 with the true
 count in `in_count`).
 
+When the id names more than one entry — `sage` is four different things — `records` holds **all** of
+them in full, each with its own references, and `records_count` says how many. `entry` stays the
+first so existing readers keep working; do not treat it as the whole answer when `ambiguous` is
+true. 193 ids are shared like this.
+
 ### `grimoire_related`
 
 | Arg | Type | Notes |
@@ -176,7 +210,38 @@ count in `in_count`).
 
 The graph traversal, grouped by field. Use `out` to follow a chain forward — *what does Basil point
 at* — and `in` to find everything that depends on something. Mars has 413 inbound references, which
-is the whole corpus pointing at one planet.
+is the whole corpus pointing at one planet. This is **one hop**; for a chain, use `path`.
+
+### `grimoire_path`
+
+| Arg | Type | Notes |
+|---|---|---|
+| `from`, `to` | string | required — entry ids |
+| `direction` | `both` / `out` / `in` | default `both` |
+| `max_depth` | number | default 4, max 6 |
+| `max_paths` | number | default 3, max 10 |
+
+How two entries are connected: the shortest chain of references, with the field that makes each link.
+
+```json
+{ "from": "basil", "to": "protection" }
+```
+
+```text
+basil —planet→ mars —planets(in)→ protection      2 hops
+```
+
+That second edge is a **backlink** — the working points at Mars, not the other way round — which is
+why `direction` defaults to `both`. A strict forward walk cannot answer the corpus's own headline
+question, because a real chain turns around. Set `out` to insist on forward references only.
+
+This pair has **five** shortest paths, all true: through Mars, through fire, through a herb it pairs
+with, and through two zodiac signs. The default returns the first 3; `max_paths` raises it. Showing
+one and hiding the rest would be a smaller answer than the corpus holds.
+
+`found: false` means "no chain within this depth", not "unrelated": 383 of the corpus's 3,071
+entries carry no reference in either direction, and the tarot cards are one such island. The
+response says so in `caveats` and offers a `hint` for widening the search.
 
 ### `grimoire_list`
 

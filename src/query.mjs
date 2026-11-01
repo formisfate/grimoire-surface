@@ -10,8 +10,10 @@
 //
 //   what is X                 lookup
 //   what mentions X           search
+//   what holds these values   find       (structured fields, not text)
 //   what does X point at      entry      (forward references)
 //   what points at X          related    (backlinks — the reverse index)
+//   how do X and Y connect    path       (multi-hop, field-labelled)
 //   what's in this file       list
 //   what is true right now    timing
 //   what fits these conditions  fits
@@ -20,9 +22,9 @@
 // state of the data.
 
 import { loadCorpus, buildCorpus as buildCorpusFrom, isSystemEntry } from './corpus.mjs';
-import { buildGraph } from './graph.mjs';
+import { buildGraph, pathBetween } from './graph.mjs';
 import { buildSearchIndex, search as runSearch, lookup as runLookup } from './search.mjs';
-import { entrySummary, entryFull, edgeOut, edgeIn, provenanceOf } from './format.mjs';
+import { entrySummary, entryFull, edgeOut, edgeIn, provenanceOf, href } from './format.mjs';
 import { corpusVersion } from './version.mjs';
 import { timingSnapshot, scoreWorkings } from './timing.mjs';
 
@@ -30,6 +32,71 @@ const MAX_LIMIT = 200;
 
 function fail(code, message, hint) {
   return { error: { code, message, ...(hint ? { hint } : {}) } };
+}
+
+// --- structured matching (`find`) ---------------------------------------------------------------
+//
+// `find` answers a different shape of question from `search`: not "what mentions this word" but
+// "what holds these values". The corpus is unusually well suited to it — `planet`, `element`,
+// `chakra`, `zodiac`, `tradition` and `tier` are clean fields on thousands of entries — and until
+// this verb existed the only way to ask was to fetch a whole catalogue and filter it yourself.
+
+/** Every scalar-valued field path in an entry, so an unknown field can be named rather than guessed. */
+function collectPaths(node, set, prefix, depth) {
+  if (depth > 4) return;
+  if (Array.isArray(node)) {
+    for (const item of node) collectPaths(item, set, prefix, depth);
+    return;
+  }
+  if (!node || typeof node !== 'object') {
+    if (prefix) set.add(prefix);
+    return;
+  }
+  for (const [k, v] of Object.entries(node)) {
+    const path = prefix ? `${prefix}.${k}` : k;
+    if (v && typeof v === 'object') collectPaths(v, set, path, depth + 1);
+    else set.add(path);
+  }
+}
+
+/** The scalar values at a dotted path, flattening arrays at every step. */
+function valuesAt(entry, path) {
+  let nodes = [entry];
+  for (const key of path.split('.')) {
+    const next = [];
+    for (const n of nodes) {
+      if (!n || typeof n !== 'object') continue;
+      const v = n[key];
+      if (v === undefined) continue;
+      if (Array.isArray(v)) next.push(...v);
+      else next.push(v);
+    }
+    nodes = next;
+  }
+  return nodes.filter((v) => v === null || typeof v !== 'object');
+}
+
+/**
+ * The forms a value is compared in. The corpus writes ids in snake_case (`new_moon`) and people type
+ * the display form (`new moon`), so both are accepted rather than making the caller learn the ids.
+ */
+function variantsOf(value) {
+  const n = String(value ?? '')
+    .toLowerCase()
+    .trim();
+  const out = new Set([n]);
+  if (n.includes(' ')) out.add(n.replace(/\s+/g, '_'));
+  if (n.includes('_')) out.add(n.replace(/_/g, ' '));
+  return out;
+}
+
+function clausePasses(entry, path, wanted) {
+  const actual = valuesAt(entry, path);
+  if (actual.length === 0) return false;
+  const actualForms = new Set();
+  for (const a of actual) for (const v of variantsOf(a)) actualForms.add(v);
+  const wantedList = Array.isArray(wanted) ? wanted : [wanted];
+  return wantedList.some((w) => [...variantsOf(w)].some((v) => actualForms.has(v)));
 }
 
 export function createSurface(options) {
@@ -138,6 +205,93 @@ export function createSurface(options) {
     };
   }
 
+  /**
+   * Structured query: entries whose fields hold these values.
+   *
+   * Deliberately not full-text. `search` ranks by how well text matches; `find` is exact and gives
+   * you a count, because "all 142 stones ruled by Venus" is a set query and a relevance ranking
+   * would be the wrong shape for it.
+   */
+  function find({ file, section, where, match = 'all', limit = 50, offset = 0 } = {}) {
+    const lim = clamp(limit, 50);
+    const off = Math.max(0, Number(offset) || 0);
+
+    if (where === null || typeof where !== 'object' || Array.isArray(where)) {
+      return fail(
+        'bad_request',
+        '`find` needs `where` — an object of field → value, e.g. {"planet":"mars"}.',
+        'A value may be an array meaning any-of that field. For text, use `search`.',
+      );
+    }
+    const clauses = Object.entries(where);
+    const mode = match === 'any' ? 'any' : 'all';
+
+    const targets = corpus.collections.filter(
+      (c) => (!file || c.file === file || c.key === file) && (!section || c.section === section),
+    );
+    if (targets.length === 0) {
+      return fail(
+        'not_found',
+        `No collection matching \`${file ?? section}\`.`,
+        'Call `list` with no arguments to see every collection.',
+      );
+    }
+
+    // A field name that exists nowhere in scope is a typo, not an empty result. Without this,
+    // `{"planets":"mars"}` against a file that calls it `planet` reads as "nothing matches" and the
+    // caller has no way to find out what the field is actually called.
+    const available = new Set();
+    for (const c of targets) {
+      for (const e of c.entries) if (!isSystemEntry(e)) collectPaths(e, available, '', 0);
+    }
+    const known = (key) => [...available].some((p) => p === key || p.startsWith(`${key}.`));
+    const unknown = clauses.map(([k]) => k).filter((k) => !known(k));
+    if (unknown.length > 0) {
+      return fail(
+        'bad_request',
+        `No field named \`${unknown.join('`, `')}\` in ${file ? `\`${file}\`` : 'this scope'}.`,
+        `Fields here include: ${[...available].sort().slice(0, 20).join(', ')}.`,
+      );
+    }
+
+    const matched = [];
+    for (const c of targets) {
+      for (const e of c.entries) {
+        if (isSystemEntry(e)) continue;
+        if (clauses.length > 0) {
+          const hits = clauses.map(([k, v]) => clausePasses(e, k, v));
+          if (!(mode === 'any' ? hits.some(Boolean) : hits.every(Boolean))) continue;
+        }
+        matched.push({ entry: e, file: c.file, collection: c, nested: false });
+      }
+    }
+
+    const page = matched.slice(off, off + lim);
+    return {
+      ...meta(),
+      filters: {
+        file: file ?? null,
+        section: section ?? null,
+        where,
+        match: mode,
+      },
+      total: matched.length,
+      offset: off,
+      count: page.length,
+      entries: page.map((r) => entrySummary(r)),
+      ...(off + lim < matched.length ? { next_offset: off + lim } : {}),
+      ...(matched.length === 0
+        ? {
+            hint:
+              'No entry holds all of those values together. Try `match: "any"`, drop a field, or call `search` if you meant to match text rather than a field.',
+          }
+        : {}),
+      caveats: [
+        '`find` matches the values written in the corpus. It does not follow references — use `related` or `path` for the graph.',
+      ],
+    };
+  }
+
   /** One entry in full, with its references in both directions. */
   function entry(id, { file } = {}) {
     if (typeof id !== 'string' || !id.trim()) {
@@ -161,13 +315,26 @@ export function createSurface(options) {
     const forward = graph.forwardRefs(primary.entry);
     const back = graph.backlinks(primary.entry.id);
 
+    // An id shared by four catalogues is four different things, and returning only the first in full
+    // made the tool unable to answer the ambiguity it had just detected — `sage` is an archetype, a
+    // herb, a resin and an oil, and you had to call `entry` four times with `file` to see them. The
+    // primary record stays where it was so existing consumers keep working; `records` is every one.
+    const records =
+      refs.length > 1
+        ? refs.map((r, i) =>
+            entryFull(r, i === 0 ? { forward, back } : { forward: graph.forwardRefs(r.entry), back: graph.backlinks(r.entry.id) }),
+          )
+        : undefined;
+
     return {
       ...meta(),
       ambiguous: refs.length > 1,
       ...(refs.length > 1
         ? {
             also_in: refs.slice(1).map((r) => ({ file: r.file, collection: r.collection.key })),
-            note: 'This id names more than one entry. The full record below is the first; `related` covers all of them.',
+            records_count: refs.length,
+            records,
+            note: 'This id names more than one entry, and each is a different thing rather than a duplicate. `entry` is the first; `records` holds all of them in full, each with its own references.',
           }
         : {}),
       entry: entryFull(primary, { forward, back }),
@@ -218,6 +385,90 @@ export function createSurface(options) {
       anywhere: refs.length > 1 ? refs.map((r) => r.file) : undefined,
       out: trim(out),
       in: trim(inn),
+    };
+  }
+
+  /**
+   * How two entries are connected: the shortest chain of references between them, each step labelled
+   * with the field that made it.
+   *
+   * This is the question `related` cannot answer, because `related` is one hop and every real chain
+   * in this corpus is longer. It is also why the answer is a path rather than a score: `basil —
+   * planet→ mars — zodiac→ aries` explains itself, where "these are related" does not.
+   */
+  function path({ from, to, direction = 'both', max_depth: maxDepth = 4, max_paths: maxPaths = 3 } = {}) {
+    for (const [name, value] of [
+      ['from', from],
+      ['to', to],
+    ]) {
+      if (typeof value !== 'string' || !value.trim()) {
+        return fail('bad_request', `\`path\` needs \`${name}\` — an entry id.`, 'Use `lookup` or `search` to find the id first.');
+      }
+    }
+
+    const start = from.trim().toLowerCase();
+    const end = to.trim().toLowerCase();
+    const nearMiss = (value) => {
+      const near = runSearch(docs, value, { limit: 3 }).results;
+      return near.length
+        ? `Did you mean: ${near.map((h) => h.doc.ref.entry.id).join(', ')}?`
+        : 'Use `search` to find it first.';
+    };
+    if ((corpus.byId.get(start) ?? []).length === 0) {
+      return fail('not_found', `No entry with the id \`${from}\`.`, nearMiss(from));
+    }
+    if ((corpus.byId.get(end) ?? []).length === 0) {
+      return fail('not_found', `No entry with the id \`${to}\`.`, nearMiss(to));
+    }
+
+    const depth = Math.min(6, Math.max(1, Number(maxDepth) || 4));
+    const want = direction === 'out' || direction === 'in' ? direction : 'both';
+    const found = pathBetween(corpus, graph, start, end, {
+      direction: want,
+      maxDepth: depth,
+      maxPaths: Math.min(10, Math.max(1, Number(maxPaths) || 3)),
+    });
+
+    const describe = (id) => {
+      const ref = (corpus.byId.get(id) ?? [])[0];
+      if (!ref) return { id, name: id, file: null, url: null };
+      return { id, name: ref.entry.name ?? ref.entry.id, file: ref.file, url: href(id, Boolean(ref.nested)) };
+    };
+
+    const paths = found.paths.map((steps) => {
+      const ids = [start, ...steps.map((s) => s.id)];
+      return {
+        length: steps.length,
+        nodes: ids.map(describe),
+        edges: steps.map((s, i) => ({ from: ids[i], field: s.field, direction: s.direction, to: ids[i + 1] })),
+      };
+    });
+
+    return {
+      ...meta(),
+      from: describe(start),
+      to: describe(end),
+      direction: want,
+      found: paths.length > 0,
+      length: found.length,
+      paths,
+      explored: found.explored,
+      depth_searched: depth,
+      caveats: [
+        'A path follows declared references only. 383 entries carry no reference in either direction, so two things can be related in meaning and still have no path — this reports the graph, not the concepts.',
+      ],
+      ...(paths.length === 0
+        ? {
+            hint: `No path within ${depth} hop(s). Raise \`max_depth\` (max 6)${
+              want === 'both' ? '' : ', or use direction "both" to allow reverse edges'
+            }.`,
+          }
+        : {}),
+      ...(paths.length > 1
+        ? {
+            note: `These are the ${paths.length} shortest paths. A dense corpus usually has more, and every one of them is true.`,
+          }
+        : {}),
     };
   }
 
@@ -348,8 +599,10 @@ export function createSurface(options) {
     info,
     lookup,
     search,
+    find,
     entry,
     related,
+    path,
     list,
     timing,
     fits,

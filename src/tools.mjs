@@ -50,9 +50,39 @@ export const TOOLS = [
     },
   },
   {
+    name: 'grimoire_find',
+    description:
+      'Filter entries by the values in their fields — the structured query, as opposed to full-text search. Ask "which herbs are ruled by Mars and run on fire?", "every tier-1 stone", "which workings call for Venus?". `where` maps a field to the value(s) it must hold; use dots for nested fields (`optimal_timing.planets`). Multiple fields are ANDed unless `match` is "any". Values match case-insensitively in either the id form or the display form ("new moon" finds `new_moon`). Returns matches as compact entries plus the true `total`, so you can page. This filters what the corpus says; it does not follow references — use `related` or `path` for the graph.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        where: {
+          type: 'object',
+          description:
+            'Field → value, e.g. {"planet":"mars","element":"fire"}. A value may be an array meaning any-of for that field. Call `list` to see the catalogues, or make a call with a wrong field and the error lists the real ones.',
+        },
+        file: { type: 'string', description: 'Optional. Restrict to one catalogue, e.g. `herbs.json` or `herbs`.' },
+        section: {
+          type: 'string',
+          description:
+            'Optional. Restrict to one section: elements, celestial, divination, forces, esoteric, materials, workings, foundations, oracles.',
+        },
+        match: {
+          type: 'string',
+          enum: ['all', 'any'],
+          description: '`all` (default) requires every field to match; `any` requires at least one.',
+        },
+        limit: { type: 'number', description: 'Maximum entries to return (default 50, max 200).' },
+        offset: { type: 'number', description: 'Skip this many matches, for paging through a long set.' },
+      },
+      required: ['where'],
+      additionalProperties: false,
+    },
+  },
+  {
     name: 'grimoire_entry',
     description:
-      'The full record for one entry, plus everything it references and everything that references it. Use this after search or lookup has told you the id. Returns the entry exactly as the corpus holds it — every field, its `tradition` and `note` — with `_meta` for addressing and a `references` block holding both directions of the graph.',
+      'The full record for one entry, plus everything it references and everything that references it. Use this after search or lookup has told you the id. Returns the entry exactly as the corpus holds it — every field, its `tradition` and `note` — with `_meta` for addressing and a `references` block holding both directions of the graph. When an id names more than one entry (`sage` is four different things), `records` holds all of them in full rather than only the first.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -66,7 +96,7 @@ export const TOOLS = [
   {
     name: 'grimoire_related',
     description:
-      'Traverse the graph from one entry: what it points at, grouped by field, and what points back at it. This is the question the corpus answers better than a table dump — "what connects Basil to Mars to Aries to the workings that call for it". Use `direction` to take one side only.',
+      'Traverse the graph from one entry: what it points at, grouped by field, and what points back at it. Use `direction` to take one side only. This is one hop — for a chain longer than that, use `path`.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -79,6 +109,28 @@ export const TOOLS = [
         limit: { type: 'number', description: 'Maximum entries per field (default 100).' },
       },
       required: ['id'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'grimoire_path',
+    description:
+      'How two entries are connected: the shortest chain of references between them, with the field that makes each link. This is the multi-hop question a single `related` call cannot answer — "how does Basil connect to Aries?" comes back as basil —planet→ mars —zodiac→ aries, and `direction: "both"` (the default) is what lets the chain turn around, since the workings that call for basil point *at* it. Returns up to `max_paths` shortest paths and the hop count; if nothing is found within `max_depth` it says so rather than implying they are unrelated.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        from: { type: 'string', description: 'The id to start from.' },
+        to: { type: 'string', description: 'The id to reach.' },
+        direction: {
+          type: 'string',
+          enum: ['both', 'out', 'in'],
+          description:
+            '`both` (default) follows references in either direction; `out` only what each entry points at; `in` only what points at it.',
+        },
+        max_depth: { type: 'number', description: 'Maximum hops to search (default 4, max 6).' },
+        max_paths: { type: 'number', description: 'Maximum shortest paths to return (default 3, max 10).' },
+      },
+      required: ['from', 'to'],
       additionalProperties: false,
     },
   },

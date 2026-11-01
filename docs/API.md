@@ -52,9 +52,9 @@ What the corpus is: sections, files, entry counts, reference counts, and how add
 curl https://ensoul.so/api/grimoire/overview
 ```
 
-The `stats` block is the health check: `entries: 3062`, `references: 34936`,
-`dangling_references: 1`. Anything else in `dangling_references` over time means the corpus has a
-broken join.
+The `stats` block is the health check: `entries: 3062`, `references: 34999`,
+`dangling_references: 0`. Anything other than zero in `dangling_references` over time means the
+corpus has a broken join.
 
 ---
 
@@ -98,6 +98,60 @@ curl 'https://ensoul.so/api/grimoire/search?q=protection&limit=3'
 
 `mode` is `all-terms` when every word in the query matched somewhere, or `any-term` when the strict
 search found nothing and it widened. A `mode` of `any-term` is a signal that the query was loose.
+
+---
+
+## `GET /find`
+
+Structured query: entries whose fields hold these values. Where `/search` ranks text, `/find` is
+exact and returns a true total.
+
+| Param | Default | Notes |
+|---|---|---|
+| `where` | required | A JSON object of field → value(s) |
+| `file` | — | Restrict to a catalogue |
+| `section` | — | Restrict to a section |
+| `match` | `all` | `all` ANDs the fields; `any` ORs them |
+| `limit` | `50` | Max 200 |
+| `offset` | `0` | Paging; the response gives `next_offset` |
+
+```bash
+curl -G 'https://ensoul.so/api/grimoire/find' \
+  --data-urlencode 'file=herbs' \
+  --data-urlencode 'where={"planet":"mars","element":"fire"}'
+```
+
+```json
+{
+  "filters": {
+    "file": "herbs",
+    "section": null,
+    "where": { "planet": "mars", "element": "fire" },
+    "match": "all"
+  },
+  "total": 41,
+  "offset": 0,
+  "count": 41,
+  "entries": [
+    { "id": "basil", "name": "Basil", "file": "herbs.json", "provenance": { "tradition": "folk_western" } }
+  ]
+}
+```
+
+A value may be an array meaning any-of for that field. A dotted key reaches into a nested object,
+which is where the timing rules live:
+
+```bash
+curl -G 'https://ensoul.so/api/grimoire/find' \
+  --data-urlencode 'file=core_workings' \
+  --data-urlencode 'where={"optimal_timing.planets":"venus"}'
+```
+
+Matching is case-insensitive and accepts either form, so `"new moon"` finds `new_moon`. An unknown
+field returns `400 bad_request` with the fields that do exist in `hint` — a typo otherwise reads as
+"nothing matches".
+
+`find` matches values as written; it does not follow references. Use `/related` or `/path` for that.
 
 ---
 
@@ -175,6 +229,11 @@ The entry object is **not filtered**. Whatever the corpus holds is what you get,
 and `tradition`. `references.in` is capped at 50 entries; `in_count` is the true total. Mars has
 413 inbound references, which is why the cap exists.
 
+When the id names more than one entry, the response sets `ambiguous: true` and adds `records` — every
+one of them in full, each with its own `_meta` and references — plus `records_count`. `entry` remains
+the first, so a caller that ignores ambiguity still works, but `records` is the complete answer.
+`sage` is the four-entry case.
+
 ---
 
 ## `GET /related/:id`
@@ -206,6 +265,54 @@ curl 'https://ensoul.so/api/grimoire/related/mars?direction=out'
 
 `resolves: false` means the value names something the corpus has no entry for — a real, reportable
 gap in the data, not a server problem.
+
+---
+
+## `GET /path/:from/:to`
+
+How two entries are connected: the shortest chain of references between them, each step labelled
+with the field that made it.
+
+| Param | Default | Notes |
+|---|---|---|
+| `direction` | `both` | `out` = forward references only, `in` = backlinks only |
+| `max_depth` | `4` | Max 6 |
+| `max_paths` | `3` | Max 10 shortest paths |
+
+```bash
+curl 'https://ensoul.so/api/grimoire/path/basil/protection'
+```
+
+```json
+{
+  "from": { "id": "basil", "name": "Basil", "file": "herbs.json", "url": "https://ensoul.so/grimoire/e/basil" },
+  "to": { "id": "protection", "name": "Protection", "file": "core_workings.json", "url": "…" },
+  "direction": "both",
+  "found": true,
+  "length": 2,
+  "paths": [
+    {
+      "length": 2,
+      "nodes": [ { "id": "basil", "…": "…" }, { "id": "mars", "…": "…" }, { "id": "protection", "…": "…" } ],
+      "edges": [
+        { "from": "basil", "field": "planet", "direction": "out", "to": "mars" },
+        { "from": "mars", "field": "planets", "direction": "in", "to": "protection" }
+      ]
+    }
+  ],
+  "explored": 81,
+  "depth_searched": 4
+}
+```
+
+The second edge in that example is a **backlink** — the working names its planets, Mars does not
+name its workings — which is why `direction` defaults to `both`. Insist on `out` to follow only
+forward references, as a strict chain.
+
+`found: false` means **no chain within this depth**, not "unrelated". A `hint` says how to widen the
+search, and `caveats` records the honest limit: 383 of the corpus's 3,071 entries carry no reference
+in either direction — the tarot cards are one such island — so two things can be related in meaning
+and still have no path.
 
 ---
 

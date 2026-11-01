@@ -115,10 +115,14 @@ function callTool(name, input) {
       return s.search(input.query, input);
     case 'grimoire_lookup':
       return s.lookup(input.query, input);
+    case 'grimoire_find':
+      return s.find(input);
     case 'grimoire_entry':
       return s.entry(input.id, input);
     case 'grimoire_related':
       return s.related(input.id, input);
+    case 'grimoire_path':
+      return s.path(input);
     case 'grimoire_list':
       return s.list(input);
     case 'grimoire_timing':
@@ -152,7 +156,7 @@ function handle(message) {
       capabilities: { tools: {} },
       serverInfo: SERVER_INFO,
       instructions:
-        'The Grimoire is a curated corpus of esoteric reference data. Call grimoire_overview once to see its shape, then grimoire_search or grimoire_lookup to find an entry, grimoire_entry for the full record, and grimoire_related to traverse. Provenance fields (tradition, culture, source, note) are meaningful: where traditions disagree, the entry says so rather than picking a winner. Do not present a contested correspondence as settled.',
+        'The Grimoire is a curated corpus of esoteric reference data. Call grimoire_overview once to see its shape, then grimoire_search for text, grimoire_find to filter by field values, grimoire_lookup when you know the name, grimoire_entry for the full record, and grimoire_related or grimoire_path to traverse. Provenance fields (tradition, culture, source, note) are meaningful: where traditions disagree, the entry says so rather than picking a winner. Do not present a contested correspondence as settled.',
     });
     return;
   }
