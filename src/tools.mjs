@@ -52,7 +52,7 @@ export const TOOLS = [
   {
     name: 'grimoire_find',
     description:
-      'Filter entries by the values in their fields — the structured query, as opposed to full-text search. Ask "which herbs are ruled by Mars and run on fire?", "every tier-1 stone", "which workings call for Venus?". `where` maps a field to the value(s) it must hold; use dots for nested fields (`optimal_timing.planets`). Multiple fields are ANDed unless `match` is "any". Values match case-insensitively in either the id form or the display form ("new moon" finds `new_moon`). Returns matches as compact entries plus the true `total`, so you can page. This filters what the corpus says; it does not follow references — use `related` or `path` for the graph.',
+      'Filter entries by the values in their fields — the structured query, as opposed to full-text search. Matching is exact: equality, or an array meaning any-of; it does not do substring or comparison operators (use `search` for text, and `fields` to see what is matchable). Ask "which herbs are ruled by Mars and run on fire?", "every tier-1 stone", "which workings call for Venus?". `where` maps a field to the value(s) it must hold; use dots for nested fields (`optimal_timing.planets`). Multiple fields are ANDed unless `match` is "any". Values match case-insensitively in either the id form or the display form ("new moon" finds `new_moon`). Returns matches as compact entries plus the true `total`, so you can page. This filters what the corpus says; it does not follow references — use `related` or `path` for the graph.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -76,6 +76,22 @@ export const TOOLS = [
         offset: { type: 'number', description: 'Skip this many matches, for paging through a long set.' },
       },
       required: ['where'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'grimoire_fields',
+    description:
+      'What can I filter on? Lists every field `grimoire_find` can match, in one catalogue or across the whole corpus: the dotted path, whether the value is a list, how many entries carry it, and a few example values. Call this before composing a `where` you are unsure about — the corpus has over a thousand matchable paths and guessing field names is how they stay invisible.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        file: { type: 'string', description: 'Optional. One catalogue, e.g. `herbs.json` or `herbs`.' },
+        section: {
+          type: 'string',
+          description: 'Optional. One section: elements, celestial, divination, forces, esoteric, materials, workings, foundations, oracles.',
+        },
+      },
       additionalProperties: false,
     },
   },

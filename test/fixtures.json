@@ -135,11 +135,6 @@
       "why": "tarot cards are graph islands — no reference connects them, and `path` must say so rather than implying the concepts are unrelated"
     }
   ],
-  "entry_ambiguity": {
-    "id": "sage",
-    "expect_records": 4,
-    "why": "one id, four catalogues — `entry` must return every one in full, not just the first"
-  },
   "when": {
     "$comment": "A fixed instant, so phase dates and windows cannot drift with the clock. 2026-10-31 20:00 Sydney is a Saturday night; the last quarter is two days off, and the next sabbat inside a 60-day horizon from 1 November is Yule on the 21st.",
     "at": "2026-10-31T20:00:00+11:00",
@@ -147,6 +142,24 @@
     "sabbat_days": 60,
     "planet": "venus",
     "working": "protection"
+  },
+  "entry_ambiguity": {
+    "id": "sage",
+    "expect_records": 4,
+    "why": "one id, four catalogues — `entry` must return every one in full, not just the first"
+  },
+  "fields": {
+    "file": "herbs.json",
+    "expect_count": 11,
+    "expect_multi": [
+      "planet",
+      "chakra",
+      "magical_uses"
+    ],
+    "expect_number": [
+      "tier"
+    ],
+    "why": "the field list is what makes `find` usable: 11 in herbs, with the multi-valued and numeric ones marked"
   },
   "must_resolve": [
     {

@@ -1,6 +1,6 @@
 # MCP server
 
-A [Model Context Protocol](https://modelcontextprotocol.io) server over stdio. Eleven tools, no
+A [Model Context Protocol](https://modelcontextprotocol.io) server over stdio. Twelve tools, no
 dependencies, no build step, no network access. It reads the corpus off disk.
 
 ---
@@ -158,7 +158,8 @@ an array meaning any-of for that field; a dotted key reaches into a nested objec
 the timing rules live (`{"optimal_timing.planets":"venus"}`).
 
 Matching is case-insensitive and accepts either form of a value: `"new moon"` finds `new_moon`, and
-`"Mars"` finds `mars`.
+`"Mars"` finds `mars`. It is **exact** — no substrings and no comparison operators, and a value like
+`">1"` is refused rather than silently matching nothing. `search` is the text tool.
 
 ```json
 { "where": { "planet": "mars" }, "file": "herbs" }
@@ -170,6 +171,39 @@ a typo would otherwise read as "nothing matches".
 
 `find` does **not** follow references. `{"planet":"mars"}` finds the herbs whose own `planet` field
 says Mars; the *workings* that call for Mars are reached with `related` or `path`.
+
+### `grimoire_fields`
+
+| Arg | Type | Notes |
+|---|---|---|
+| `file` | string | restrict to one catalogue |
+| `section` | string | restrict to one section |
+
+What `find` can match, in a scope: every scalar field path, whether it is a list, how many entries
+carry it, and a few examples. The corpus has **over 1,300** matchable paths; running this before
+composing a `where` is the difference between using `find` and guessing at field names.
+
+```json
+{ "file": "herbs" }
+```
+
+```text
+11 fields, every one measured:
+  chakra        list   259 entries   ["heart_chakra", "crown_chakra", …]
+  element       —      259           ["fire", "water", …]
+  id            —      259           ["basil", "bay_leaf", …]
+  magical_uses  list   259           ["protection", "love", …]
+  name          —      259           ["Basil", "Bay Leaf", …]
+  pairs_with    list   244           ["rosemary", "sage", …]
+  planet        list   259           ["mars", "sun", …]
+  properties    list   259           ["protection", "love", …]
+  tier          number 259           [1, 2, …]
+  tradition     —      259           ["folk_western", "vedic", …]
+  zodiac        list   259           ["scorpio", "aries", …]
+```
+
+`list` means the value is multi-valued, so `{"planet": "mars"}` matches any herb with Mars among its
+planets, and an array is any-of rather than all-of.
 
 ### `grimoire_lookup`
 

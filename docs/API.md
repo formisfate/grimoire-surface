@@ -151,7 +151,42 @@ Matching is case-insensitive and accepts either form, so `"new moon"` finds `new
 field returns `400 bad_request` with the fields that do exist in `hint` — a typo otherwise reads as
 "nothing matches".
 
+Matching is **exact** — equality, or an array meaning any-of. There are no substrings and no
+comparison operators: `{"tier":">1"}` is refused with a 400 rather than quietly matching nothing.
+Use `/search` for text. To see what is matchable, use `/fields`.
+
 `find` matches values as written; it does not follow references. Use `/related` or `/path` for that.
+
+---
+
+## `GET /fields`
+
+What `/find` can match, in a scope: every scalar field path, whether it is a list, how many entries
+carry it, and example values. The corpus has over 1,300 matchable paths, so this is the way to find
+out whether a field exists without guessing.
+
+| Param | Default | Notes |
+|---|---|---|
+| `file` | — | Restrict to a catalogue |
+| `section` | — | Restrict to a section |
+
+```bash
+curl 'https://ensoul.so/api/grimoire/fields?file=herbs'
+```
+
+```json
+{
+  "file": "herbs",
+  "count": 11,
+  "fields": [
+    { "path": "planet", "type": "string", "multi": true, "entries": 259,
+      "examples": ["mars", "sun", "venus"] },
+    { "path": "tier", "type": "number", "multi": false, "entries": 259, "examples": [1, 2, 3] }
+  ]
+}
+```
+
+`multi: true` means the value is a list, so a single value matches if it is one of them.
 
 ---
 

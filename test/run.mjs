@@ -146,6 +146,35 @@ for (const f of fixtures.finds) {
   });
 }
 
+check('fields lists what find can match, with shape and coverage', () => {
+  const f = fixtures.fields;
+  const r = surface.fields({ file: f.file });
+  assert(!r.error, `errored: ${r.error?.message}`);
+  assert(r.count === f.expect_count, `${r.count} fields, expected ${f.expect_count}`);
+  for (const path of f.expect_multi) {
+    const field = r.fields.find((x) => x.path === path);
+    assert(field, `missing ${path}`);
+    assert(field.multi === true, `${path} is not marked multi-valued`);
+    assert(field.entries > 0, `${path} has no entries`);
+  }
+  for (const path of f.expect_number) {
+    const field = r.fields.find((x) => x.path === path);
+    assert(field?.type === 'number', `${path} is ${field?.type}, expected number`);
+  }
+});
+
+check('the whole corpus has far more matchable fields than the error hint can show', () => {
+  const r = surface.fields({});
+  assert(r.count > 500, `only ${r.count} corpus-wide fields`);
+  assert(r.collections.length === 81, `${r.collections.length} collections`);
+});
+
+check('an operator is refused rather than silently matching nothing', () => {
+  const r = surface.find({ file: 'herbs', where: { tier: '>1' } });
+  assert(r.error?.code === 'bad_request', `code was ${r.error?.code}`);
+  assert(/exactly/.test(r.error.message), `message did not explain exactness: ${r.error.message}`);
+});
+
 check('a wrong field name is named as wrong, with the real ones offered', () => {
   // The failure mode this prevents: a typo reads as "nothing matches", and the caller concludes the
   // corpus has no Mars herbs when the field is actually called `planet`.
@@ -490,6 +519,7 @@ const mcpCalls = [
   { name: 'grimoire_search', args: { query: 'protection', limit: 2 } },
   { name: 'grimoire_lookup', args: { query: 'basil' } },
   { name: 'grimoire_find', args: { file: 'herbs', where: { planet: 'mars' }, limit: 2 } },
+  { name: 'grimoire_fields', args: { file: 'herbs' } },
   { name: 'grimoire_entry', args: { id: 'mars' } },
   { name: 'grimoire_related', args: { id: 'mars', direction: 'out' } },
   { name: 'grimoire_path', args: { from: 'basil', to: 'protection' } },

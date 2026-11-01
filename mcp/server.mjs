@@ -117,6 +117,8 @@ function callTool(name, input) {
       return s.lookup(input.query, input);
     case 'grimoire_find':
       return s.find(input);
+    case 'grimoire_fields':
+      return s.fields(input);
     case 'grimoire_entry':
       return s.entry(input.id, input);
     case 'grimoire_related':

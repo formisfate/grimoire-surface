@@ -124,6 +124,7 @@ echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":
 | `grimoire_overview` | What is in here? Start with this. |
 | `grimoire_search` | What mentions "protection"? |
 | `grimoire_find` | Which herbs are ruled by Mars and run on fire? |
+| `grimoire_fields` | What can I filter on here, and what are the values shaped like? |
 | `grimoire_lookup` | What is Lilith / the Tower / Jupiter? |
 | `grimoire_entry` | Give me the full record for `basil`, plus everything it references. |
 | `grimoire_related` | What connects to Mars? |

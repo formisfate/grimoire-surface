@@ -76,24 +76,6 @@ function zoneOf(value) {
 // `chakra`, `zodiac`, `tradition` and `tier` are clean fields on thousands of entries — and until
 // this verb existed the only way to ask was to fetch a whole catalogue and filter it yourself.
 
-/** Every scalar-valued field path in an entry, so an unknown field can be named rather than guessed. */
-function collectPaths(node, set, prefix, depth) {
-  if (depth > 4) return;
-  if (Array.isArray(node)) {
-    for (const item of node) collectPaths(item, set, prefix, depth);
-    return;
-  }
-  if (!node || typeof node !== 'object') {
-    if (prefix) set.add(prefix);
-    return;
-  }
-  for (const [k, v] of Object.entries(node)) {
-    const path = prefix ? `${prefix}.${k}` : k;
-    if (v && typeof v === 'object') collectPaths(v, set, path, depth + 1);
-    else set.add(path);
-  }
-}
-
 /** The scalar values at a dotted path, flattening arrays at every step. */
 function valuesAt(entry, path) {
   let nodes = [entry];
@@ -132,6 +114,33 @@ function clausePasses(entry, path, wanted) {
   for (const a of actual) for (const v of variantsOf(a)) actualForms.add(v);
   const wantedList = Array.isArray(wanted) ? wanted : [wanted];
   return wantedList.some((w) => [...variantsOf(w)].some((v) => actualForms.has(v)));
+}
+
+/**
+ * Every scalar field path in one entry, with whether it sits inside an array and a few values.
+ *
+ * `find` can match about two thousand paths across the corpus, which is powerful and unusable
+ * without a way to ask what they are. This is the other half of that: the error hint used to be the
+ * only oracle, and it was alphabetical and capped, so it read as "there are twenty fields".
+ */
+function fieldPathsOf(node, out, path, inArray, depth) {
+  if (depth > 5) return;
+  if (Array.isArray(node)) {
+    for (const v of node) fieldPathsOf(v, out, path, true, depth);
+    return;
+  }
+  if (!node || typeof node !== 'object') {
+    if (!path) return;
+    const rec = out.get(path) ?? { multi: false, values: [] };
+    if (inArray) rec.multi = true;
+    if (rec.values.length < 3) rec.values.push(node);
+    out.set(path, rec);
+    return;
+  }
+  for (const [k, v] of Object.entries(node)) {
+    const child = path ? `${path}.${k}` : k;
+    fieldPathsOf(v, out, child, inArray, depth + 1);
+  }
 }
 
 export function createSurface(options) {
@@ -277,15 +286,34 @@ export function createSurface(options) {
     // caller has no way to find out what the field is actually called.
     const available = new Set();
     for (const c of targets) {
-      for (const e of c.entries) if (!isSystemEntry(e)) collectPaths(e, available, '', 0);
+      for (const e of c.entries) {
+        if (isSystemEntry(e)) continue;
+        const perEntry = new Map();
+        fieldPathsOf(e, perEntry, '', false, 0);
+        for (const path of perEntry.keys()) available.add(path);
+      }
     }
     const known = (key) => [...available].some((p) => p === key || p.startsWith(`${key}.`));
     const unknown = clauses.map(([k]) => k).filter((k) => !known(k));
     if (unknown.length > 0) {
+      const sample = [...available].sort();
       return fail(
         'bad_request',
         `No field named \`${unknown.join('`, `')}\` in ${file ? `\`${file}\`` : 'this scope'}.`,
-        `Fields here include: ${[...available].sort().slice(0, 20).join(', ')}.`,
+        `${available.size} fields are matchable here, e.g. ${sample.slice(0, 10).join(', ')}${
+          sample.length > 10 ? `, … call \`fields\` for all ${available.size}` : ''
+        }.`,
+      );
+    }
+
+    // `find` is exact. A caller who types an operator used to get "0 results" and conclude the
+    // corpus held none, so name what happened instead of quietly matching a literal string.
+    const operatorish = clauses.find(([, v]) => typeof v === 'string' && /^[<>]=?|^!=/.test(v.trim()));
+    if (operatorish) {
+      return fail(
+        'bad_request',
+        `\`find\` matches values exactly, so \`${operatorish[1]}\` would be read as a literal string.`,
+        'Equality, or an array meaning any-of. Use `search` for text, or `fields` to see what is matchable here.',
       );
     }
 
@@ -324,6 +352,80 @@ export function createSurface(options) {
       caveats: [
         '`find` matches the values written in the corpus. It does not follow references — use `related` or `path` for the graph.',
       ],
+    };
+  }
+
+  /**
+   * What can `find` match here? The field paths in a scope, with shape, coverage and examples.
+   *
+   * `find` matches about two thousand paths across the corpus, which is powerful and unusable if the
+   * only way to learn them is to guess wrong. Every path listed is a key `find` accepts; `multi` says
+   * whether the value is a list, and `entries` how many entries carry it.
+   */
+  function fields({ file, section } = {}) {
+    const targets = corpus.collections.filter(
+      (c) => (!file || c.file === file || c.key === file) && (!section || c.section === section),
+    );
+    if (targets.length === 0) {
+      return fail(
+        'not_found',
+        `No collection matching \`${file ?? section}\`.`,
+        'Call `list` with no arguments to see every collection.',
+      );
+    }
+
+    const stats = new Map();
+    for (const c of targets) {
+      for (const e of c.entries) {
+        if (isSystemEntry(e)) continue;
+        const perEntry = new Map();
+        fieldPathsOf(e, perEntry, '', false, 0);
+        for (const [path, rec] of perEntry) {
+          const s = stats.get(path) ?? {
+            entries: 0,
+            multi: false,
+            strings: 0,
+            numbers: 0,
+            booleans: 0,
+            values: [],
+          };
+          s.entries += 1;
+          if (rec.multi) s.multi = true;
+          for (const v of rec.values) {
+            if (typeof v === 'string') s.strings += 1;
+            else if (typeof v === 'number') s.numbers += 1;
+            else if (typeof v === 'boolean') s.booleans += 1;
+            const shown = typeof v === 'string' && v.length > 60 ? `${v.slice(0, 57)}…` : v;
+            if (s.values.length < 4 && !s.values.includes(shown)) s.values.push(shown);
+          }
+          stats.set(path, s);
+        }
+      }
+    }
+
+    const list = [...stats.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([path, s]) => ({
+        path,
+        type:
+          s.numbers > 0 && s.strings === 0
+            ? 'number'
+            : s.booleans > 0 && s.strings === 0 && s.numbers === 0
+              ? 'boolean'
+              : 'string',
+        multi: s.multi,
+        entries: s.entries,
+        examples: s.values,
+      }));
+
+    return {
+      ...meta(),
+      file: file ?? null,
+      section: section ?? null,
+      collections: targets.map((c) => c.file),
+      count: list.length,
+      fields: list,
+      hint: "Use these paths as keys in `find`'s `where`; a dotted path reaches a nested field, and a value may be an array meaning any-of.",
     };
   }
 
@@ -796,6 +898,7 @@ export function createSurface(options) {
     lookup,
     search,
     find,
+    fields,
     entry,
     related,
     path,
