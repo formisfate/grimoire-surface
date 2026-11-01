@@ -358,8 +358,9 @@ Returns `planetary_day`, `planetary_hour` (with all 24 hours in `hours`), `sunri
 `moon`, `season`, `time_of_day`, `sabbat`, and — importantly — **`basis`** and **`caveats`**.
 
 `basis: "location"` means sunrise and sunset were computed for the coordinates you gave.
-`basis: "approximation"` means you gave none, so the day was divided at a flat 6am/6pm, which can be
-hours out. The response says which it used rather than quietly mixing them.
+`basis: "approximation"` means you gave none, so the day was divided at a flat 6am/6pm **in the
+server's time zone** — accurate only if you are near the server. The response says which it used
+rather than quietly mixing them.
 
 The moon phase is computed from the mean synodic month: good to about a day, fine for "which phase
 are we in", not an ephemeris.

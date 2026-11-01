@@ -703,7 +703,7 @@ export function createSurface(options) {
         : {}),
       caveats: [
         basis === 'approximation'
-          ? 'No latitude/longitude supplied: hour boundaries use a flat 6am/6pm and can be a couple of hours out.'
+          ? "No latitude/longitude supplied: hour boundaries use a flat 6am/6pm in *the server's* time zone, which is only close to the truth if you are near it. Pass latitude and longitude for windows that mean anything locally."
           : 'Sunrise and sunset computed for the supplied latitude/longitude.',
         'Phase dates come from the mean synodic month and are accurate to about a day. The instant given is the middle of the phase window — opposition for the full moon, conjunction for the new — not an almanac time.',
         ...(workingBlock

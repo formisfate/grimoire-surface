@@ -265,8 +265,9 @@ With no arguments: every file with its entry count. With `file`: every entry in 
 Planetary day, planetary hour, all 24 hours, moon phase, season, nearest sabbat.
 
 Read `basis` and `caveats` before trusting an hour boundary. `basis: "location"` means real sunrise
-and sunset for the coordinates; `basis: "approximation"` means a flat 6am/6pm, which can be a couple
-of hours out.
+and sunset for the coordinates; `basis: "approximation"` means a flat 6am/6pm **in the server's time
+zone**, which is only close to the truth if you are near it. Pass coordinates for hour boundaries
+that mean anything locally.
 
 ### `grimoire_when`
 

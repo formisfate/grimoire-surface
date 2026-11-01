@@ -12,8 +12,9 @@
 // Two honesty rules, both inherited from the corpus's own:
 //
 // 1. **Say how the answer was reached.** Without a latitude and longitude the day is divided at a
-//    flat 6am/6pm, which is wrong by up to a couple of hours at high latitudes. Every timing
-//    response carries `basis: 'location' | 'approximation'` rather than silently mixing them.
+//    flat 6am/6pm in the *server's* time zone, which is only near the caller's if the caller is near
+//    the server. Every timing response carries `basis: 'location' | 'approximation'` rather than
+//    silently mixing them.
 // 2. **The moon phase is an approximation**, computed from the mean synodic month. It is good to
 //    about a day. It is fine for "which phase are we in", and it is not an ephemeris.
 
@@ -402,7 +403,7 @@ export function timingSnapshot(corpus, { date = new Date(), latitude, longitude,
     })),
     caveats: [
       hours.basis === 'approximation'
-        ? 'No latitude/longitude supplied: the day was divided at a flat 6am/6pm, so the hour boundaries can be off by a couple of hours.'
+        ? "No latitude/longitude supplied: the day was divided at a flat 6am/6pm in *the server's* time zone. That is only a couple of hours out if the caller is near the server; otherwise it can be many hours out. Supply latitude and longitude for an honest hour boundary."
         : 'Sunrise and sunset computed for the supplied latitude/longitude.',
       'Moon phase is computed from the mean synodic month, accurate to about a day.',
     ],
