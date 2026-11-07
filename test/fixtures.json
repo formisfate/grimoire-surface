@@ -150,7 +150,7 @@
   },
   "fields": {
     "file": "herbs.json",
-    "expect_count": 11,
+    "expect_count": 12,
     "expect_multi": [
       "planet",
       "chakra",
@@ -159,7 +159,7 @@
     "expect_number": [
       "tier"
     ],
-    "why": "the field list is what makes `find` usable: 11 in herbs, with the multi-valued and numeric ones marked"
+    "why": "the field list is what makes `find` usable: 12 in herbs (the `description` each material gained on 2026-11-05 is the twelfth), with the multi-valued and numeric ones marked"
   },
   "must_resolve": [
     {

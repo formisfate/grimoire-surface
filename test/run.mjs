@@ -70,7 +70,7 @@ check('entry counts agree with catalog.json', () => {
 });
 
 check('the corpus has the shape it claims', () => {
-  assert(corpus.stats.files === 81, `expected 81 files, found ${corpus.stats.files}`);
+  assert(corpus.stats.files === 83, `expected 83 files, found ${corpus.stats.files}`);
   assert(corpus.stats.entries > 3000, `expected >3000 entries, found ${corpus.stats.entries}`);
   assert(graph.refCount > 30000, `expected >30000 references, found ${graph.refCount}`);
 });
@@ -166,7 +166,7 @@ check('fields lists what find can match, with shape and coverage', () => {
 check('the whole corpus has far more matchable fields than the error hint can show', () => {
   const r = surface.fields({});
   assert(r.count > 500, `only ${r.count} corpus-wide fields`);
-  assert(r.collections.length === 81, `${r.collections.length} collections`);
+  assert(r.collections.length === 83, `${r.collections.length} collections`);
 });
 
 check('an operator is refused rather than silently matching nothing', () => {
@@ -479,8 +479,8 @@ writeFileSync(bundleGzPath, gzipSync(Buffer.from(JSON.stringify(bundle)), { leve
 
 check('the bundle carries the corpus, the catalog and the join table', () => {
   assert(bundle.$schema === 'grimoire-bundle/1', `schema ${bundle.$schema}`);
-  assert(Object.keys(bundle.data).length === 81, `${Object.keys(bundle.data).length} data files`);
-  assert(bundle.catalog?.files?.length === 81, 'catalog missing or short');
+  assert(Object.keys(bundle.data).length === 83, `${Object.keys(bundle.data).length} data files`);
+  assert(bundle.catalog?.files?.length === 83, 'catalog missing or short');
   // Derive the expected size from the corpus rather than freezing a number: this test is about
   // the bundle carrying the table, not about how many rules the table happens to have.
   assert(
