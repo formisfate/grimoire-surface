@@ -1,9 +1,9 @@
 # grimoire-surface
 
-A query surface for the **Grimoire** — a hand-curated corpus of 81 JSON files of esoteric and
+A query surface for the **Grimoire** — a hand-curated corpus of 83 JSON files of esoteric and
 metaphysical reference data: planets, deities, tarot, runes, chakras, stones, herbs, the tree of
-life, the I Ching, the Shem HaMephorash, Ifá, Jyotisha, and more. 3,083 entries, 35,010
-cross-references, every one of them resolving.
+life, the I Ching, the Shem HaMephorash, Ifá, Jyotisha, and more. 3,120 catalogued entries (3,143
+with system objects), 35,593 cross-references, every one of them resolving.
 
 The corpus is the interesting part and it lives elsewhere. This repo is what makes it answerable.
 

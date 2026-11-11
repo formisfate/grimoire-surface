@@ -20,7 +20,7 @@ and names whatever is out of step. If you changed something and this passes, the
 
 ```
   grimoire/                          ← the data. Canonical. Edit here FIRST, never in the mirror.
-  ├── *.json            81 catalogues
+  ├── *.json            83 catalogues
   ├── joins.json        the join table  ──► generates ──► ensoul-web/src/lib/grimoire-joins.ts
   └── catalog.json      titles + counts
         │
