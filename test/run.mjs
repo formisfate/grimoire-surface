@@ -131,6 +131,7 @@ for (const f of fixtures.searches) {
       assert(ids.includes(f.expect_contains), `expected ${f.expect_contains} among ${ids.join(', ')}`);
     }
     if (f.min_results) assert(r.count >= f.min_results, `only ${r.count} results`);
+    assert(r.total >= r.count, 'total is smaller than the returned count');
   });
 }
 

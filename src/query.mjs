@@ -260,6 +260,7 @@ export function createSurface(options) {
       query,
       mode: found.mode,
       count: found.results.length,
+      total: found.total,
       results: found.results.map((h) => ({
         score: h.score,
         matched: h.matched,

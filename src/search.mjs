@@ -160,7 +160,7 @@ export function search(docs, query, { file, section, limit = 20 } = {}) {
     mode = 'any-term';
   }
 
-  return { mode, results: hits.slice(0, limit) };
+  return { mode, total: hits.length, results: hits.slice(0, limit) };
 }
 
 /**
