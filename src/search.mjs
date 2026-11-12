@@ -160,7 +160,18 @@ export function search(docs, query, { file, section, limit = 20 } = {}) {
     mode = 'any-term';
   }
 
-  return { mode, total: hits.length, results: hits.slice(0, limit) };
+  const sectionFacets = {};
+  for (const hit of hits) {
+    const section = hit.doc.ref.collection.section;
+    sectionFacets[section] = (sectionFacets[section] ?? 0) + 1;
+  }
+
+  return {
+    mode,
+    total: hits.length,
+    facets: { section: sectionFacets },
+    results: hits.slice(0, limit),
+  };
 }
 
 /**

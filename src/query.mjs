@@ -261,6 +261,7 @@ export function createSurface(options) {
       mode: found.mode,
       count: found.results.length,
       total: found.total,
+      facets: found.facets,
       results: found.results.map((h) => ({
         score: h.score,
         matched: h.matched,

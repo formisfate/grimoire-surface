@@ -132,6 +132,8 @@ for (const f of fixtures.searches) {
     }
     if (f.min_results) assert(r.count >= f.min_results, `only ${r.count} results`);
     assert(r.total >= r.count, 'total is smaller than the returned count');
+    const facetTotal = Object.values(r.facets?.section ?? {}).reduce((n, v) => n + v, 0);
+    assert(facetTotal === r.total, `section facets sum to ${facetTotal}, total is ${r.total}`);
   });
 }
 
