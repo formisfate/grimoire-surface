@@ -109,12 +109,19 @@ function scoreDoc(doc, queryTokens) {
 
   for (const token of queryTokens) {
     let best = 0;
+    const canPrefix = token.length >= 4;
     if (doc.idTokens.includes(token) || doc.nameTokens.includes(token)) {
       best = 10;
+    } else if (canPrefix && [...doc.idTokens, ...doc.nameTokens].some((t) => t.startsWith(token))) {
+      // A partial name is still an identifier, but it must not outrank the exact name.
+      best = 8;
     } else {
       for (const group of doc.tokensByField) {
-        if (!group.tokens.includes(token)) continue;
-        if (group.weight > best) best = group.weight;
+        if (group.tokens.includes(token)) {
+          if (group.weight > best) best = group.weight;
+        } else if (canPrefix && group.tokens.some((t) => t.startsWith(token))) {
+          best = Math.max(best, Math.max(1, group.weight * 0.35));
+        }
       }
     }
     if (best > 0) {

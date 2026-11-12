@@ -87,6 +87,12 @@ check('every reference resolves', () => {
   assert(found.length === 0, `${found.length} unresolved reference(s): ${found.slice(0, 5).join(', ')}`);
 });
 
+check('prefix search reaches a longer identifier', () => {
+  const r = surface.search('mercur', { limit: 10 });
+  assert(!r.error, `errored: ${r.error?.message}`);
+  assert(r.results.length > 0, 'prefix search returned nothing');
+});
+
 console.log('\nFixtures');
 
 for (const f of fixtures.lookups) {
